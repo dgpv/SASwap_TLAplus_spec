@@ -1,10 +1,11 @@
 # TLA+ specification for Succinct Atomic Swap smart contract
 
-This repository contains the TLA+ specification of the smart contract
-for Succing Atomic Swaps that can be implemented on the blockchain
-platform that uses UTXO model such as Bitcoin on one side, and 
-other blockchain platform that does not need to be based on UTXO
-model or have transaction timelock properties.
+This repository contains the [TLA+](https://lamport.azurewebsites.net/tla/tla.html)
+specification of the smart contract for Succing Atomic Swaps
+that can be implemented on the blockchain platform that uses UTXO model
+such as Bitcoin on one side, and other blockchain platform that does not need
+to be based on UTXO model or have transaction timelock properties
+on the other side.
 
 The contract was first described by Ruben Somsen in
 [the post](https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2020-May/017846.html)
