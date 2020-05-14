@@ -33,10 +33,8 @@ sending modelling is enabled with `STEALTHY_SEND_POSSIBLE = TRUE`
 
 At the moment, temporal properties checking does not work
 
-Also, one transition from the [diagram](https://gist.githubusercontent.com/RubenSomsen/8853a66a64825716f51b409be528355f/raw/27b696dffbb1fc7bf6dea58b3767ed17b47ca6b4/SuccinctAtomicSwap.svg)
-of the contract is not modelled: the refund transaction #1 cooperative
-Alice & Bob spend case, because it was not clear where this transition
-leads to
+Steps 5 and 6 from the [diagram](https://gist.githubusercontent.com/RubenSomsen/8853a66a64825716f51b409be528355f/raw/27b696dffbb1fc7bf6dea58b3767ed17b47ca6b4/SuccinctAtomicSwap.svg)
+is not modelled
 
 There may be mistakes or omissions in the model
 
