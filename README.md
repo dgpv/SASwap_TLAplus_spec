@@ -34,7 +34,7 @@ sending modelling is enabled with `STEALTHY_SEND_POSSIBLE = TRUE`
 At the moment, temporal properties checking does not work
 
 Steps 5 and 6 from the [diagram](https://gist.githubusercontent.com/RubenSomsen/8853a66a64825716f51b409be528355f/raw/27b696dffbb1fc7bf6dea58b3767ed17b47ca6b4/SuccinctAtomicSwap.svg)
-is not modelled
+are not modelled
 
 There may be mistakes or omissions in the model
 
@@ -59,5 +59,5 @@ run `make pdf` to generate PDF file for the TLA+ specification
 
 ## Authors and contributors
 
-The contract specification is created by Dmitry Petukhov
+The contract specification was created by Dmitry Petukhov
 based on the explanations and diagrams presented by Ruben Somsen
