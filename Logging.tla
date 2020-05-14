@@ -4,10 +4,13 @@ EXTENDS SASwap, TLC
 \* Add your statements for debug logging here
 \* uncomment `ACTION_CONSTRAINT Logging` in config file to enable
 Logging ==
-    \/ /\ tx_start_B \in ConfirmedTransactions
-       /\ PrintT(<<"AAS", AvailableSigs(tx_spend_B, Alice),
-                   tx_success \in SentTransactions,
-                   secretBob \in {x[2]: x \in shared_knowledge}>>)
+    \* \/ PrintT(<<"ST", fullState>>)
+    \* Uncomment to print the deadlines for transactions at the time tx_timeout confirmed
+    \* \/ tx_spend_timeout \in ConfirmedTransactions
+    \*     => Assert(FALSE,
+    \*               UNION {{<<id, Deadline(id, v.ds)>>:
+    \*                       v \in {v \in tx_map[id]: Deadline(id, v.ds) /= UnreachableHeight}}:
+    \*                      id \in all_transactions})
     \/ TRUE
 
 =============================================================================

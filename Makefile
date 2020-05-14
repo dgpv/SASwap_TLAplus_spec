@@ -1,15 +1,18 @@
 NAME = SASwap
 
+ifeq (${NUM_WORKERS},)
+NUM_WORKERS = 1
+endif
+
 all: check
 
 check: build/metadir
 	java -jar ${TLATOOLSDIR}/tla2tools.jar \
 	    -config ${NAME}.cfg \
-	    -workers 1 \
+	    -workers ${NUM_WORKERS} \
 	    -metadir build/metadir \
 	    -terse \
 	    -cleanup \
-	    -deadlock \
 	    MC.tla
 
 pdf: build/metadir
