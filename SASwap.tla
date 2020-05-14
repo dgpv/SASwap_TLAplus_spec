@@ -122,7 +122,7 @@ AvailableSigs(tx, sender) ==
 
 \* All signatures known for certain transaction.
 \* These go to shared knowledge when the transaction is mined
-\* (unless alredy shared)
+\* (unless already shared)
 \* This is a simplification, because in general there could be
 \* unpublished signatures when threshold signing is used.
 \* But for this contract, this is OK.
@@ -195,7 +195,6 @@ SendTx(tx, sender) ==
 
 \* Give tx directly to miner, bypassing global mempool 
 StealthySendTx(tx, sender) ==
-    /\ sender = Bob
     /\ STEALTHY_SEND_POSSIBLE
     /\ CanEnterMempool(tx, sender)
     /\ block_txs' = block_txs \union {tx}
