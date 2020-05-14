@@ -14,10 +14,11 @@ ASSUME MAX_DAYS_TO_CONCLUDE > 4
 CONSTANT STEALTHY_SEND_POSSIBLE
 ASSUME STEALTHY_SEND_POSSIBLE \in BOOLEAN
 
-VARIABLES blocks, block_txs, mempool, shared_knowledge, sigs
+VARIABLES blocks, block_txs, mempool, shared_knowledge, sigs, signers_map
 
+sigState == <<sigs, signers_map>>
 networkState == <<blocks, block_txs, mempool>>
-fullState == <<networkState, shared_knowledge, sigs>>
+fullState == <<networkState, sigState, shared_knowledge>>
 
 \* Can use this predicate to limit possible state space by
 \* ignoring the states after MAX_DAYS_TO_CONCLUDE has passed
@@ -56,11 +57,11 @@ tx_spend_refund_1 == "tx_spend_refund_1"
 tx_spend_refund_2 == "tx_spend_refund_2"
 tx_spend_timeout  == "tx_spend_timeout"
 
-\* who can produce what signature
-canSignMap == [Alice |-> {sigAlice, secretAlice},
-               Bob   |-> {sigBob, secretBob}]
+participants == {Alice, Bob}
 
-all_sigs == UNION {canSignMap[x]: x \in DOMAIN canSignMap}
+all_sigs == {sigAlice, sigBob, secretAlice, secretBob}
+
+Counterparty(p) == CHOOSE c \in participants: c /= p
 
 ConfirmedTransactions ==
     UNION {blocks[bn] : bn \in DOMAIN blocks}
@@ -125,7 +126,7 @@ AvailableSigs(tx, sender) ==
 \* This is a simplification, because in general there could be
 \* unpublished signatures when threshold signing is used.
 \* But for this contract, this is OK.
-AllSigsForTx(tx) == UNION {sigs[sender][tx]: sender \in {Alice, Bob}}
+AllSigsForTx(tx) == UNION {sigs[sender][tx]: sender \in participants}
 
 \* Adaptor signatures are modelled as having to supply 3 values
 \* for the signature set, where two values are the sigs,
@@ -182,7 +183,7 @@ Share(knowledge) == shared_knowledge' = shared_knowledge \union knowledge
 \* Note that the sigs record-of-records may not be the most elegant
 \* data structure for the purpose, might be worth it to explore other options
 SignTx(tx, ss, signer) ==
-    /\ \A s \in ss: s \in canSignMap[signer]
+    /\ \A s \in ss: s \in signers_map[signer]
     /\ sigs' = [sigs EXCEPT
                   ![signer] = [sigs[signer] EXCEPT
                                  ![tx] = sigs[signer][tx] \union ss]]
@@ -194,6 +195,7 @@ SendTx(tx, sender) ==
 
 \* Give tx directly to miner, bypassing global mempool 
 StealthySendTx(tx, sender) ==
+    /\ sender = Bob
     /\ STEALTHY_SEND_POSSIBLE
     /\ CanEnterMempool(tx, sender)
     /\ block_txs' = block_txs \union {tx}
@@ -202,7 +204,7 @@ StealthySendTx(tx, sender) ==
 \* they can send it to mempool, or stealthy to the miner
 \* (if STEALTHY_SEND_POSSIBLE is TRUE)
 SendSomething ==
-    \E sender \in {Alice, Bob}:
+    \E sender \in participants:
         \E tx \in all_transactions:
             \/ /\ SendTx(tx, sender)
                /\ UNCHANGED block_txs
@@ -242,7 +244,7 @@ InPhase_0 ==
 (***********************)
 
 \* helper operators to declutter the action expressions
-NoSigning == UNCHANGED sigs
+NoSigning == UNCHANGED sigState
 NothingShared == UNCHANGED shared_knowledge
 
 AliceAction ==
@@ -317,7 +319,8 @@ TypeOK ==
     /\ \A pair \in shared_knowledge:
             /\ pair[1] \in all_transactions
             /\ pair[2] \in all_sigs
-    /\ DOMAIN sigs = {Alice, Bob}
+    /\ DOMAIN sigs = participants
+    /\ DOMAIN signers_map = participants
     /\ \A sender \in DOMAIN sigs:
           \A tx \in DOMAIN sigs[sender]:
              /\ tx \in all_transactions
@@ -362,14 +365,18 @@ Init ==
     /\ shared_knowledge = {}
     /\ sigs = [Alice |-> [tx \in all_transactions |-> {}],
                Bob |-> [tx \in all_transactions |-> {}]]
+    /\ signers_map = [Alice |-> {sigAlice, secretAlice},
+                      Bob   |-> {sigBob, secretBob}]
+
 
 Next ==
     /\ ConcludedInFiniteDays
     /\ EachDaySomethingIsConfirmed
-    /\ \/ AliceAction   /\ UNCHANGED networkState
-       \/ BobAction     /\ UNCHANGED networkState
-       \/ SendSomething /\ UNCHANGED <<blocks, sigs>>
-       \/ MinerAction   /\ UNCHANGED sigs
+       \* Note that signers_map is always unchanged at the moment
+    /\ \/ AliceAction   /\ UNCHANGED <<networkState, signers_map>>
+       \/ BobAction     /\ UNCHANGED <<networkState, signers_map>>
+       \/ SendSomething /\ UNCHANGED <<blocks, sigState>>
+       \/ MinerAction   /\ UNCHANGED sigState
 
 Spec == Init /\ [][Next]_fullState \* /\ WF_networkState(Next)
              
