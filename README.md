@@ -35,6 +35,9 @@ Some interesting invariants that are enabled in SASwap.cfg:
 - `AliceDoesNotKnowBobsSecretOnTimeout`:
   Contract can time out only when Alice never received Bob's secret
 
+Temporal properties can be checked as well, although the checking
+is likely to be much slower.
+
 ## Limitations
 
 #### Only one miner in the model, so no reorgs
@@ -59,7 +62,7 @@ separately.
 Reviews and corrections welcome! For extending the scope of the model,
 a new project may be better option, though.
 
-#### There are probably more safety invariants to add
+#### There are likely more interesting safety invariants or temporal properties that can be added
 
 Suggestions welcome!
 
