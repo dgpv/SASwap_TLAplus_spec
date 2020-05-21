@@ -1,7 +1,8 @@
 -------------------------------- MODULE SASwap ---------------------------------
-(******************************************************************************)
-(* Copyright (C) 2020 Dmitry Petukhov https://github.com/dgpv   (MIT License) *)
-(******************************************************************************)
+\* `.SASwap TLA+ specification (c) by Dmitry Petukhov (https://github.com/dgpv)
+\* `.This SASwap TLA+ specification is licensed under a Creative Commons
+\* `.Attribution-ShareAlike 4.0 International License
+\* `.<http://creativecommons.org/licenses/by-sa/4.0/>
 
 EXTENDS Naturals, Sequences, TLC
 
@@ -210,6 +211,10 @@ SendSomething ==
             \/ /\ StealthySendTx(tx, sender)
                /\ UNCHANGED <<mempool, shared_knowledge>>
 
+(***********************)
+(* Participant actions *)
+(***********************)
+
 \* Conditions to divide the action into phases according to original spec
 
 Phase_3_cond == tx_start_B \in ConfirmedTransactions
@@ -237,10 +242,6 @@ InPhase_0 ==
     /\ ~Phase_2_cond
     /\ ~Phase_3_cond
 
-\*`^\newpage^'
-(***********************)
-(* Participant actions *)
-(***********************)
 
 \* helper operators to declutter the action expressions
 NoSigning == UNCHANGED sigState
@@ -352,7 +353,6 @@ AllEventuallyConfirmed ==
 SuccessTxLeadsToSpentB ==
     tx_success \in SentTransactions ~> tx_spend_B \in ConfirmedTransactions
 
-\*`^\newpage^'
 (*******************)
 (* High-level spec *)
 (*******************)
