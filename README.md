@@ -32,8 +32,11 @@ Some interesting invariants that are enabled in SASwap.cfg:
 - `NoSingleParticipantTakesAll`:
   Neither participant can receive both A and B coins
 
-- `AliceDoesNotKnowBobsSecretOnTimeout`:
-  Contract can time out only when Alice never received Bob's secret
+- `NoConflictingTransactions`:
+  Conflicting transactions cannot simultaneoulsy be in confirmed
+  blocks and the mempool, or in confirmed blocks and next block.
+  There can be conflicts between transactions in the mempool
+  and the next block if `STEALTHY_SEND_POSSIBLE=TRUE`
 
 Temporal properties can be checked as well, although the checking
 is likely to be much slower.
