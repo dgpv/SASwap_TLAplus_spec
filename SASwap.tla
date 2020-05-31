@@ -25,11 +25,6 @@ CONSTANT STEALTHY_SEND_POSSIBLE
 \* When TRUE, the state space is increased dramatically.
 ASSUME STEALTHY_SEND_POSSIBLE \in BOOLEAN
 
-\* A few generic operators
-Range(f) == { f[x] : x \in DOMAIN f }
-Min(set) == CHOOSE x \in set: \A y \in set : x <= y
-Max(set) == CHOOSE x \in set: \A y \in set : x >= y
-
 \* Operator to create transaction instances
 Tx(id, ss, by, to, via) ==
     [ id |-> id, ss |-> ss, to |-> to, by |-> by, via |-> via ]
@@ -41,8 +36,14 @@ VARIABLE shared_knowledge  \* {Tx, ...}
 VARIABLE signers_map       \* [participant |-> {allowed_sig, ...}]
 VARIABLE per_block_enabled \* <<{Tx, ...}, ...>>
 
-fullState  == <<blocks, next_block, signers_map, shared_knowledge, mempool, per_block_enabled>>
+fullState  == <<blocks, next_block, signers_map, shared_knowledge, mempool,
+                per_block_enabled>>
 unchangedByMM  == <<blocks, signers_map, shared_knowledge, mempool>>
+
+\* A few generic operators
+Range(f) == { f[x] : x \in DOMAIN f }
+Min(set) == CHOOSE x \in set: \A y \in set : x <= y
+Max(set) == CHOOSE x \in set: \A y \in set : x >= y
 
 \* Various definitions that help to improve readability of the spec
 
@@ -77,19 +78,18 @@ nLockTime == "nLockTime"
 nSequence == "nSequence"
 NoTimelock == [ days |-> 0, type |-> nLockTime ]
 
+\* `^\newpage^'
 \* If blocks per day are low, the absolute locks need to be shifted,
 \* otherwise not all contract paths will be reachable
 ABS_LK_OFFSET == CASE BLOCKS_PER_DAY = 1 -> 2
                    [] BLOCKS_PER_DAY = 2 -> 1
                    [] OTHER              -> 0
 
-\* `tx_map' is the map of the transactions, their possible destinations and timelocks.
-
+\* The map of the transactions, their possible destinations and timelocks.
 \* Adaptor signatures are modelled by an additional value in the required
-\* signature set (`ss'). For modelling purposes, the secret acts as just another sig.
+\* signature set -- `ss'. For modelling purposes, the secret acts as just another signature.
 \* `ds' stands for "destinations", and  `lk' stands for "lock" (timelocks).
 \* Only blockheight-based timelocks are modelled.
-
 tx_map == [
 
     \* 'Contract' transactions -- destinations are other transactions
@@ -119,7 +119,6 @@ tx_map == [
                      ss |-> { sigAlice, sigBob },
                      lk |-> [ days |-> 2, type |-> nSequence ]],
 
-    \* `^\newpage^'
     \* 'Terminal' transactions -- destinations are participants
 
     tx_spend_A              |-> [ds |-> { Alice, Bob },
@@ -150,8 +149,7 @@ tx_map == [
 
 all_transactions == DOMAIN tx_map
 
-\* On-chain, contract starts with Alice locking A.
-\* Defined here so that miner's actions does not need to refer to any
+\* `first_transaction' defined so that miner's actions do not need to refer to any
 \* contract-specific info, and can just refer to `first_transaction' instead.
 first_transaction == tx_lock_A
 
@@ -242,6 +240,7 @@ Timelock(id) == IF "lk" \in DOMAIN tx_map[id] THEN tx_map[id].lk ELSE NoTimelock
 
 UnreachableHeight == 2^30+(2^30-1)
 
+\* `^\newpage^'
 \* Calculate the height at which the timelock for the given transaction
 \* expires, taking BLOCKS_PER_DAY and dependencies confirmation into account
 TimelockExpirationHeight(id) ==
@@ -313,6 +312,7 @@ ShareTransactions(ids, by) ==
      IN /\ ShareKnowledge(txs)
         /\ shared_knowledge' /= shared_knowledge \* not a new knowledge => fail
 
+\* `^\newpage^'
 \* Txs enabled at the current cycle, used to update per_block_enabled vector
 NewlyEnabledTxs ==
     { tx \in
@@ -346,6 +346,7 @@ SendTransactionToMiner(id, sender, to) ==
        IN /\ IsSpendableTx(tx, NextBlockConfirmedTransactions)
           /\ next_block' = next_block \union { tx }
 
+\* `^\newpage^'
 SendTransaction(id, sender, to) ==
     \/ /\ SendTransactionToMempool(id, sender, to)
        /\ UNCHANGED next_block
@@ -365,6 +366,7 @@ HasCustody(ids, participant) ==
 \* Sharing secrets or keys has to occur before deadline to send tx_success
 TooLateToShare == Len(blocks) >= Deadline(tx_success)
 
+\* `^\newpage^'
 (***********************)
 (* Participant actions *)
 (***********************)
@@ -406,8 +408,6 @@ InPhase_0 ==
 NoSending == UNCHANGED <<mempool, next_block>>
 NoKeysShared == UNCHANGED signers_map
 NoKnowledgeShared == UNCHANGED shared_knowledge
-
-\* `^\newpage^'
 
 AliceAction ==
     LET Send(ids) == SendSomeTransaction(ids, Alice)
@@ -504,7 +504,6 @@ MempoolMonitorAction ==
             \union { [bmptx EXCEPT !.via = "fee-bump"]: bmptx \in txs_to_bump }
 
 \*`^\newpage^'
-
 (****************)
 (* Miner action *)
 (****************)
@@ -551,22 +550,7 @@ UpdateEnabledPerBlock ==
 (* High-level contract spec *)
 (****************************)
 
-SwapSuccessful ==
-    /\ HasCustody({ tx_spend_B }, Alice)
-    /\ \/ HasCustody({ tx_spend_A, tx_spend_success,
-                       tx_spend_timeout, tx_spend_revoke }, Bob)
-       \/ /\ ALICE_IRRATIONAL
-          /\ HasCustody({ tx_spend_refund_1_bob }, Bob)
-
-SwapAborted ==
-    /\ HasCustody({ tx_spend_A, tx_spend_refund_1_alice, tx_spend_refund_2 }, Alice)
-    /\ HasCustody({ tx_spend_B }, Bob)
-
-SwapTimedOut ==
-    /\ tx_spend_timeout \in ConfirmedTransactions
-       \* Alice can't claim tx_spend_B on timeout
-    /\ secretBob \notin signers_map[Alice]
-    /\ secretBob \notin UNION { tx.ss: tx \in shared_knowledge }
+\* First, the 'unnatural' cases.
 
 \* For all transactions defined by the original spec
 \* to be covered by the model, we need to also model the case
@@ -593,13 +577,34 @@ SwapUnnaturalEnding ==
     \/ BobLostByBeingLateOnRefund_1
     \/ BobLostByBeingLateOnRefund_2
 
+\*`^\newpage^'
+
+\* The normal, 'natural' cases.
+
+SwapSuccessful ==
+    /\ HasCustody({ tx_spend_B }, Alice)
+    /\ \/ HasCustody({ tx_spend_A, tx_spend_success,
+                       tx_spend_timeout, tx_spend_revoke }, Bob)
+       \/ /\ ALICE_IRRATIONAL
+          /\ HasCustody({ tx_spend_refund_1_bob }, Bob)
+
+SwapAborted ==
+    /\ HasCustody({ tx_spend_A, tx_spend_refund_1_alice, tx_spend_refund_2 }, Alice)
+    /\ HasCustody({ tx_spend_B }, Bob)
+
+SwapTimedOut ==
+    /\ tx_spend_timeout \in ConfirmedTransactions
+       \* Alice can't claim tx_spend_B on timeout
+    /\ secretBob \notin signers_map[Alice]
+    /\ secretBob \notin UNION { tx.ss: tx \in shared_knowledge }
+
 \* All possible endings of the contract
 ContractFinished == \/ SwapSuccessful
                     \/ SwapAborted
                     \/ SwapTimedOut
                     \/ ALICE_IRRATIONAL /\ SwapUnnaturalEnding
 
-\* Actions in the contract that is not yet finished. Separated into
+\* Actions in the contract when it is not yet finished. Separated into
 \* dedicated operator to be able to test `ENABLED ContractAction`
 ContractAction ==
     \/ AliceAction               /\ UNCHANGED blocks
@@ -614,17 +619,16 @@ ContractAction ==
 (***************)
 
 TypeOK ==
-    LET TxConsistent(tx, vias) ==
-            /\ tx.id \in all_transactions
-            /\ tx.ss \subseteq tx_map[tx.id].ss
-            /\ tx.to \in DstSet(tx.id)
-            /\ tx.by \in participants
-            /\ tx.via \in vias
+    LET TxConsistent(tx, vias) == /\ tx.id \in all_transactions
+                                  /\ tx.ss \subseteq tx_map[tx.id].ss
+                                  /\ tx.to \in DstSet(tx.id)
+                                  /\ tx.by \in participants
+                                  /\ tx.via \in vias
         AllSigsPresent(tx) == tx.ss = tx_map[tx.id].ss
-        SigConsistent(sig) ==
-            /\ sig.id \in all_transactions
-            /\ sig.s \in all_sigs
-            /\ sig.ds \subseteq participants \union DOMAIN dependency_map
+        SigConsistent(sig) == /\ sig.id \in all_transactions
+                              /\ sig.s \in all_sigs
+                              /\ sig.ds \subseteq participants
+                                                  \union DOMAIN dependency_map
      IN /\ \A tx \in UNION Range(blocks):
              \/ /\ TxConsistent(tx, {"mempool", "miner", "fee-bump"})
                 /\ AllSigsPresent(tx)
@@ -645,8 +649,7 @@ TypeOK ==
              \/ TxConsistent(tx, {"mempool", "miner", "fee-bump", "direct"})
              \/ Print(<<"~TypeOK shared_knowledge", tx>>, FALSE)
         /\ \A p \in DOMAIN signers_map:
-              \/ /\ p \in participants
-                 /\ \A sig \in signers_map[p]: sig \in all_sigs
+              \/ p \in participants /\ \A sig \in signers_map[p]: sig \in all_sigs
               \/ Print(<<"~TypeOK signers_map", p>>, FALSE)
 
 ConsistentPhase ==
@@ -688,6 +691,7 @@ TransactionTimelocksEnforced ==
     /\ STEALTHY_SEND_POSSIBLE
        => \A tx \in next_block: Len(blocks) >= TimelockExpirationHeight(tx.id)
 
+\*`^\newpage^'
 ExpectedStateOnTimeout ==
     SwapTimedOut => RemainingTransactions \subseteq { tx_lock_B, tx_spend_B }
 
