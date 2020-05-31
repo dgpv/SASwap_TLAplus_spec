@@ -7,12 +7,8 @@ slot_max_soft_dls  == 2
 slot_lock_B_last  == 3
 
 ASSUME TLCSet(slot_confpairs, {})
-ASSUME TLCSet(slot_min_dls,
-              [ id \in all_transactions
-                |-> [ ds \in {v.ds: v \in tx_map[id]} |-> UnreachableHeight ] ])
-ASSUME TLCSet(slot_max_soft_dls,
-              [ id \in all_transactions
-                |-> [ ds \in {v.ds: v \in tx_map[id]} |-> 0 ] ])
+ASSUME TLCSet(slot_min_dls, [ id \in all_transactions |-> UnreachableHeight ])
+ASSUME TLCSet(slot_max_soft_dls, [ id \in all_transactions |-> 0 ])
 ASSUME TLCSet(slot_lock_B_last, 0)
 
 \* The following actions can be used as 'CONSTRAINTS', but they will not
@@ -20,23 +16,19 @@ ASSUME TLCSet(slot_lock_B_last, 0)
 \* some useful data.
 
 ShowConfirmed ==
-    \/ LET confirmed_pairs == {<<tx.id, tx.ds>>: tx \in UNION Range(blocks)}
-           diff == confirmed_pairs \ TLCGet(slot_confpairs)
+    \/ LET diff == ConfirmedTransactions \ TLCGet(slot_confpairs)
         IN {} /= diff => /\ TLCSet(slot_confpairs,
-                                   TLCGet(slot_confpairs) \union confirmed_pairs)
+                                   TLCGet(slot_confpairs) \union ConfirmedTransactions)
                          /\ PrintT(diff)
     \/ TRUE
 
-ShowMinDeadlinesOp(DeadlineOp(_,_), ReduceOp(_), tlc_slot) ==
-    LET cur_dls == [ id \in all_transactions
-                    |-> [ ds \in {v.ds: v \in tx_map[id]} |-> DeadlineOp(id, ds) ] ]
+ShowMinDeadlinesOp(DeadlineOp(_), ReduceOp(_), tlc_slot) ==
+    LET cur_dls == [ id \in all_transactions |-> DeadlineOp(id) ]
         old_dls == TLCGet(tlc_slot)
      IN cur_dls /= old_dls
         => LET new_dls == [ id \in all_transactions
-                            |-> [ ds \in {v.ds: v \in tx_map[id]}
-                                  |-> ReduceOp({old_dls[id][ds], cur_dls[id][ds]}) ] ]
-               f2s(f) == UNION { { <<d1, d2, f[d1][d2]>>: d2 \in DOMAIN f[d1] }:
-                                 d1 \in DOMAIN f }
+                            |-> ReduceOp({old_dls[id], cur_dls[id]}) ]
+               f2s(f) == { <<d1, f[d1]>>: d1 \in DOMAIN f }
                diff == f2s(new_dls) \ f2s(old_dls)
             IN /\ TLCSet(tlc_slot, new_dls)
                /\ diff /= {} => PrintT(diff)

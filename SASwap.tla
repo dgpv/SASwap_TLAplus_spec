@@ -23,8 +23,8 @@ Range(f) == { f[x] : x \in DOMAIN f }
 Min(set) == CHOOSE x \in set: \A y \in set : x <= y
 Max(set) == CHOOSE x \in set: \A y \in set : x >= y
 
-Tx(id, ss, ds, by, to, via) ==
-    [ id |-> id, ss |-> ss, ds |-> ds, to |-> to, by |-> by, via |-> via ]
+Tx(id, ss, by, to, via) ==
+    [ id |-> id, ss |-> ss, to |-> to, by |-> by, via |-> via ]
 
 VARIABLE blocks            \* <<{Tx, ...}, ...>>
 VARIABLE next_block        \* {Tx, ...}
@@ -34,7 +34,7 @@ VARIABLE signers_map       \* [participant |-> {allowed_sig, ...}]
 VARIABLE per_block_enabled \* <<{Tx, ...}, ...>>
 
 fullState  == <<blocks, next_block, signers_map, shared_knowledge, mempool, per_block_enabled>>
-allExceptNextBlock  == <<blocks, signers_map, shared_knowledge, mempool>>
+unchangedByMM  == <<blocks, signers_map, shared_knowledge, mempool>>
 
 \* Various definitions that help to improve readability of the spec
 
@@ -88,74 +88,64 @@ tx_map == [
 
     \* XXX items need not be sets now
 
-    tx_lock_A   |-> {[ds |-> { tx_success, tx_refund_1, tx_revoke, tx_spend_A },
-                      ss |-> { sigAlice }]},
+    tx_lock_A   |-> [ds |-> { tx_success, tx_refund_1, tx_revoke, tx_spend_A },
+                     ss |-> { sigAlice }],
 
-    tx_lock_B   |-> {[ds |-> { tx_spend_B },
-                      ss |-> { sigBob }]},
+    tx_lock_B   |-> [ds |-> { tx_spend_B },
+                     ss |-> { sigBob }],
 
-    tx_success  |-> {[ds |-> { tx_spend_success },
-                      ss |-> { sigAlice, sigBob, secretBob }]},
+    tx_success  |-> [ds |-> { tx_spend_success },
+                     ss |-> { sigAlice, sigBob, secretBob }],
 
-    tx_refund_1 |-> {[ds |-> { tx_spend_refund_1_bob, tx_spend_refund_1_alice },
-                      ss |-> { sigAlice, sigBob, secretAlice },
-                      lk |-> [ days |-> ABS_LK_OFFSET + 1, type |-> nLockTime ]]},
+    tx_refund_1 |-> [ds |-> { tx_spend_refund_1_bob, tx_spend_refund_1_alice },
+                     ss |-> { sigAlice, sigBob, secretAlice },
+                     lk |-> [ days |-> ABS_LK_OFFSET + 1, type |-> nLockTime ]],
 
-    tx_revoke   |-> {[ds |-> { tx_refund_2, tx_timeout, tx_spend_revoke },
-                      ss |-> { sigAlice, sigBob },
-                      lk |-> [ days |-> ABS_LK_OFFSET + 2, type |-> nLockTime ]]},
+    tx_revoke   |-> [ds |-> { tx_refund_2, tx_timeout, tx_spend_revoke },
+                     ss |-> { sigAlice, sigBob },
+                     lk |-> [ days |-> ABS_LK_OFFSET + 2, type |-> nLockTime ]],
 
-    tx_refund_2 |-> {[ds |-> { tx_spend_refund_2 },
-                      ss |-> { sigAlice, sigBob, secretAlice },
-                      lk |-> [ days |-> 1, type |-> nSequence ]]},
+    tx_refund_2 |-> [ds |-> { tx_spend_refund_2 },
+                     ss |-> { sigAlice, sigBob, secretAlice },
+                     lk |-> [ days |-> 1, type |-> nSequence ]],
 
-    tx_timeout  |-> {[ds |-> { tx_spend_timeout },
-                      ss |-> { sigAlice, sigBob },
-                      lk |-> [ days |-> 2, type |-> nSequence ]]},
+    tx_timeout  |-> [ds |-> { tx_spend_timeout },
+                     ss |-> { sigAlice, sigBob },
+                     lk |-> [ days |-> 2, type |-> nSequence ]],
 
     \* `^\newpage^'
     \* 'Terminal' transactions -- destinations are participants
 
-    tx_spend_A        |-> {[ds |-> { Alice, Bob },
-                            ss |-> { sigAlice, sigBob }]},
+    tx_spend_A              |-> [ds |-> { Alice, Bob },
+                                 ss |-> { sigAlice, sigBob }],
 
-    tx_spend_B        |-> {[ds |-> { Alice, Bob },
-                            ss |-> { secretAlice, secretBob }]},
+    tx_spend_B              |-> [ds |-> { Alice, Bob },
+                                 ss |-> { secretAlice, secretBob }],
 
-    tx_spend_success  |-> {[ds |-> { Bob },
-                            ss |-> { sigBob }]},
+    tx_spend_success        |-> [ds |-> { Bob },
+                                 ss |-> { sigBob }],
 
-    tx_spend_refund_1_bob
-                      |-> {[ds |-> { Bob },
-                            ss |-> { sigAlice, sigBob }]},
+    tx_spend_refund_1_bob   |-> [ds |-> { Bob },
+                                 ss |-> { sigAlice, sigBob }],
 
-    tx_spend_refund_1_alice
-                      |-> {[ds |-> { Alice },
-                            ss |-> { sigAlice },
-                            lk |-> [ days |-> 1, type |-> nSequence ]]},
+    tx_spend_refund_1_alice |-> [ds |-> { Alice },
+                                 ss |-> { sigAlice },
+                                 lk |-> [ days |-> 1, type |-> nSequence ]],
 
-    tx_spend_revoke   |-> {[ds |-> { Alice, Bob },
-                            ss |-> { sigAlice, sigBob }]},
+    tx_spend_revoke         |-> [ds |-> { Alice, Bob },
+                                 ss |-> { sigAlice, sigBob }],
 
-    tx_spend_refund_2 |-> {[ds |-> { Alice },
-                            ss |-> { sigAlice }]},
+    tx_spend_refund_2       |-> [ds |-> { Alice },
+                                 ss |-> { sigAlice }],
 
-    tx_spend_timeout  |-> {[ds |-> { Bob },
-                            ss |-> { sigBob }]}
+    tx_spend_timeout        |-> [ds |-> { Bob },
+                                 ss |-> { sigBob }]
 ]
 
 all_transactions == DOMAIN tx_map
 
-\* No variants for transaction with identical destination sets are allowed,
-\* because we use (id, ds) to identify a transaction variant
-ASSUME \A vset \in Range(tx_map):
-            Cardinality({ v["ds"]: v \in vset }) = Cardinality(vset)
-
 \* On-chain, contract starts with Alice locking A
 first_transaction == tx_lock_A
-
-\* This will fail if there's more than one variant
-SoleVariant(id) == CHOOSE v \in tx_map[id]: Cardinality(tx_map[id]) = 1
 
 ConfirmedTransactions == { tx.id: tx \in UNION Range(blocks) }
 
@@ -168,15 +158,15 @@ MempoolTransactions == { tx.id: tx \in mempool }
 
 SentTransactions == ConfirmedTransactions \union MempoolTransactions
 
+EnabledTransactions == {tx.id: tx \in UNION Range(per_block_enabled)}
+
 ContractTransactions ==
     { id \in all_transactions:
-         \A variant \in tx_map[id]:
-         \A d \in variant.ds: d \in all_transactions }
+         \A d \in tx_map[id].ds: d \in all_transactions }
 
 TerminalTransactions ==
     { id \in all_transactions:
-         \A variant \in tx_map[id]:
-         \A d \in variant.ds: d \in participants }
+         \A d \in tx_map[id].ds: d \in participants }
 
 ASSUME \A id \in all_transactions: \/ id \in TerminalTransactions
                                    \/ id \in ContractTransactions
@@ -184,16 +174,20 @@ ASSUME \A id \in all_transactions: \/ id \in TerminalTransactions
 \* In this contract each transaction has only one parent,
 \* so we can use simple mapping from dep_id to parent id
 dependency_map ==
-    [ dep_id \in
-         UNION { v.ds: v \in UNION { tx_map[id]: id \in ContractTransactions } }
-      |-> CHOOSE id \in ContractTransactions:
-             dep_id \in UNION { v.ds: v \in tx_map[id] } ]
+    [ dep_id \in UNION { tx_map[id].ds: id \in ContractTransactions }
+      |-> CHOOSE id \in ContractTransactions: dep_id \in tx_map[id].ds ]
 
 \* Special destination for the case when funds will still be locked
 \* at the contract after the transaction is spent
 Contract == "Contract"
 
-DstSet(id, ds) == IF id \in ContractTransactions THEN { Contract } ELSE ds
+DstSet(id) ==
+    IF id \in ContractTransactions THEN { Contract } ELSE tx_map[id].ds
+
+SingleDst(id) == CASE id \in ContractTransactions -> Contract
+                   [] Cardinality(tx_map[id].ds) = 1
+                      -> CHOOSE d \in tx_map[id].ds: TRUE
+                   \* no 'OTHER' clause - only single dst is expected
 
 ConflictingSet(id) ==
     IF id \in DOMAIN dependency_map
@@ -215,7 +209,7 @@ DependencyChain(id) ==
 
 RECURSIVE AllDependants(_)
 AllDependants(id) ==
-    LET dependants == (UNION { v.ds: v \in tx_map[id] }) \ participants
+    LET dependants == tx_map[id].ds \ participants
      IN IF dependants = {}
         THEN { id }
         ELSE dependants \union UNION { AllDependants(d_id): d_id \in dependants }
@@ -227,24 +221,12 @@ InvalidatedTransactions ==
 RemainingTransactions ==
     ((all_transactions \ ConfirmedTransactions) \ InvalidatedTransactions)
 
-Timelock(id, ds) ==
-    LET v == CHOOSE v \in tx_map[id]: v.ds = ds
-     IN IF "lk" \in DOMAIN v
-        THEN v.lk
-        ELSE NoTimelock
-
-\* Transaction variants with different timelock types are not modelled
-ASSUME \A id \in all_transactions:
-       \A v1 \in tx_map[id]:
-       \A v2 \in tx_map[id]:
-            LET t1 == Timelock(id, v1.ds)
-                t2 == Timelock(id, v2.ds)
-             IN t1.type = t2.type \/ NoTimelock \in { t1, t2 }
+Timelock(id) == IF "lk" \in DOMAIN tx_map[id] THEN tx_map[id].lk ELSE NoTimelock
 
 UnreachableHeight == 2^30+(2^30-1)
 
-TimelockExpirationHeight(id, ds) ==
-    LET lk == Timelock(id, ds)
+TimelockExpirationHeight(id) ==
+    LET lk == Timelock(id)
      IN CASE lk.type = nLockTime
              -> lk.days * BLOCKS_PER_DAY
           [] lk.type = nSequence
@@ -255,35 +237,34 @@ TimelockExpirationHeight(id, ds) ==
 
 \* "Hard" deadline for transaction means that it is unsafe to publish
 \* the transaction after the deadline
-Deadline(id, ds) ==
-    LET hs == UNION { { TimelockExpirationHeight(c_id, v.ds): v \in tx_map[c_id] }:
-                      c_id \in ConflictingSet(id) \ { id } }
-        higher_hs == { h \in hs: h > TimelockExpirationHeight(id, ds) }
+Deadline(id) ==
+    LET hs == { TimelockExpirationHeight(c_id):
+                c_id \in ConflictingSet(id) \ { id } }
+        higher_hs == { h \in hs: h > TimelockExpirationHeight(id) }
      IN IF higher_hs = {}
         THEN UnreachableHeight
         ELSE Min(higher_hs)
 
 \* "Soft" deadline for transaction means that after the deadline,
 \* mining the transaction will mean that it was 'stalling' for too long
-SoftDeadline(id, ds) ==
-    LET dl == Deadline(id, ds)
-        h == TimelockExpirationHeight(id, ds)
+SoftDeadline(id) ==
+    LET dl == Deadline(id)
+        h == TimelockExpirationHeight(id)
      IN IF dl = UnreachableHeight
-        THEN IF \E tx \in UNION Range(per_block_enabled): tx.id = id /\ tx.ds = ds
+        THEN IF id \in EnabledTransactions
              THEN ( CHOOSE en \in DOMAIN per_block_enabled:
-                        \E tx \in per_block_enabled[en]: tx.id = id /\ tx.ds = ds )
+                        \E tx \in per_block_enabled[en]: tx.id = id )
                   + MAX_DAYS_STALLING * BLOCKS_PER_DAY
              ELSE IF h /= UnreachableHeight
                   THEN h + MAX_DAYS_STALLING * BLOCKS_PER_DAY
                   ELSE 0
         ELSE dl
 
-SigsAvailable(id, ds, sender, to) ==
+SigsAvailable(id, sender, to) ==
     LET secrets_shared ==
             UNION { tx.ss \intersect all_secrets: tx \in shared_knowledge }
         sigs_shared ==
             UNION { tx.ss: tx \in { tx \in shared_knowledge: /\ tx.id = id
-                                                             /\ tx.ds = ds
                                                              /\ tx.to = to } }
      IN sigs_shared \union secrets_shared \union signers_map[sender]
 
@@ -293,8 +274,8 @@ DependencySatisfied(id, ids) ==
 IsSpendableTx(tx, other_ids) ==
     /\ {} = ConflictingSet(tx.id) \intersect other_ids
     /\ DependencySatisfied(tx.id, other_ids)
-    /\ tx.ss \subseteq SigsAvailable(tx.id, tx.ds, tx.by, tx.to)
-    /\ Len(blocks) >= TimelockExpirationHeight(tx.id, tx.ds)
+    /\ tx.ss \subseteq SigsAvailable(tx.id, tx.by, tx.to)
+    /\ Len(blocks) >= TimelockExpirationHeight(tx.id)
 
 \* Sending tx_spend_B does not actually expose secrets, because the secrets
 \* are used as keys, and sigSecretBob would be exposed rather than secretBob.
@@ -308,14 +289,8 @@ ShareKnowledge(knowledge) ==
      IN shared_knowledge' = shared_knowledge \union knowledge_filtered
 
 ShareTransactions(ids, by) ==
-    LET Dst(id) == IF id \in ContractTransactions
-                   THEN Contract
-                   ELSE LET v == CHOOSE v \in tx_map[id]: TRUE
-                        IN CASE Cardinality(v.ds) = 1 -> CHOOSE d \in v.ds: TRUE
-                        \* no 'OTHER' clause - no sharing of ambigous-dst transactions
-        Ss(v) == (v.ss \intersect signers_map[by]) \ all_secrets
-        txs == UNION { { Tx(id, Ss(v), v.ds, by, Dst(id), "direct"): v \in tx_map[id] }:
-                       id \in ids }
+    LET Ss(id) == (tx_map[id].ss \intersect signers_map[by]) \ all_secrets
+        txs == { Tx(id, Ss(id), by, SingleDst(id), "direct"): id \in ids }
      IN /\ ShareKnowledge(txs)
         /\ shared_knowledge' /= shared_knowledge \* not a new knowledge => fail
 
@@ -324,23 +299,19 @@ NewlyEnabledTxs ==
     { tx \in
       UNION
       { UNION
-        { UNION
+        {
           {
-            {
-              Tx(id, variant.ss, variant.ds, sender, to, "enabled"):
-              to \in DstSet(id, variant.ds)
-            }: variant \in tx_map[id]
+            Tx(id, tx_map[id].ss, sender, to, "enabled"): to \in DstSet(id)
           }: id \in RemainingTransactions
         }: sender \in participants
-      }: /\ ~\E etx \in UNION Range(per_block_enabled):
-                etx.id = tx.id /\ etx.ds = tx.ds
+      }: /\ ~\E etx \in UNION Range(per_block_enabled): etx.id = tx.id
          /\ IsSpendableTx(tx, ConfirmedTransactions)
     }
 
-SendTransactionToMempool(id, variant, sender, to) ==
-    LET tx == Tx(id, variant.ss, variant.ds, sender, to, "mempool")
+SendTransactionToMempool(id, sender, to) ==
+    LET tx == Tx(id, tx_map[id].ss, sender, to, "mempool")
      IN /\ IsSpendableTx(tx, SentTransactions)
-        /\ Len(blocks) < Deadline(id, variant.ds)
+        /\ Len(blocks) < Deadline(id)
         /\ mempool' = mempool \union { tx }
         /\ ShareKnowledge({ tx })
 
@@ -350,29 +321,30 @@ SendTransactionToMempool(id, variant, sender, to) ==
 \* unless the block is orphaned. Orphan blocks are not modelled,
 \* and therefore there's no need for additional restriction
 \* as any state space restriction can possibly mask some other issue
-SendTransactionToMiner(id, variant, sender, to) ==
+SendTransactionToMiner(id, sender, to) ==
     /\ STEALTHY_SEND_POSSIBLE
-    /\ LET tx == Tx(id, variant.ss, variant.ds, sender, to, "miner")
+    /\ LET tx == Tx(id, tx_map[id].ss, sender, to, "miner")
        IN /\ IsSpendableTx(tx, NextBlockConfirmedTransactions)
           /\ next_block' = next_block \union { tx }
 
-SendTransaction(id, variant, sender, to) ==
-    \/ /\ SendTransactionToMempool(id, variant, sender, to)
+SendTransaction(id, sender, to) ==
+    \/ /\ SendTransactionToMempool(id, sender, to)
        /\ UNCHANGED next_block
-    \/ /\ SendTransactionToMiner(id, variant, sender, to)
+    \/ /\ SendTransactionToMiner(id, sender, to)
        /\ UNCHANGED <<mempool, shared_knowledge>>
 
 SendSomeTransaction(ids, sender) ==
     \E id \in ids:
-    \E variant \in tx_map[id]:
-    \E to \in DstSet(id, variant.ds \intersect { sender }):
-        SendTransaction(id, variant, sender, to)
+    \E to \in (IF id \in ContractTransactions
+               THEN {Contract}
+               ELSE tx_map[id].ds \intersect { sender }):
+        SendTransaction(id, sender, to)
 
 HasCustody(ids, participant) ==
     \E id \in ids: \E tx \in UNION Range(blocks): tx.id = id /\ tx.to = participant
 
 \* Sharing secrets or keys has to occur before deadline to send tx_success
-TooLateToShare == Len(blocks) >= Deadline(tx_success, SoleVariant(tx_success).ds)
+TooLateToShare == Len(blocks) >= Deadline(tx_success)
 
 (***********************)
 (* Participant actions *)
@@ -425,7 +397,7 @@ AliceAction ==
             CASE ALICE_IRRATIONAL -> TRUE \* Unsafe txs are OK for irrational Alice
               [] id = tx_refund_1 \* Do not send refund_1 if tx_success was shared
                  -> tx_success \notin { tx.id: tx \in shared_knowledge }
-              [] secretAlice \in UNION { v.ss: v \in tx_map[id] }
+              [] secretAlice \in tx_map[id].ss
                  \* Once Alice received secretBob, should never send out secretAlice
                  -> \/ secretBob \notin signers_map[Alice]
                     \/ id = tx_spend_B \* unless this is a transaction to get B
@@ -458,8 +430,7 @@ AliceAction ==
 BobAction ==
     LET Send(ids) == SendSomeTransaction(ids, Bob)
         Share(ids) == ShareTransactions(ids, Bob)
-        tx_success_sigs == \* To check that signed tx_success was shared by Alice
-            SigsAvailable(tx_success, SoleVariant(tx_success).ds, Bob, Contract)
+        tx_success_sigs == SigsAvailable(tx_success, Bob, Contract)
      IN \/ /\ InPhase_0
            /\ Share(phase0_to_share_Bob)
            /\ NoSending /\ NoKeysShared
@@ -481,7 +452,7 @@ BobAction ==
 \*`^\newpage^'
 
 MempoolMonitorActionRequired ==
-    \E tx \in mempool: /\ Len(blocks) + 1 = Deadline(tx.id, tx.ds)
+    \E tx \in mempool: /\ Len(blocks) + 1 = Deadline(tx.id)
                        /\ tx.id \notin NextBlockTransactions
 
 \* We update next_block directly rather than having to deal with fees and prioritization.
@@ -502,7 +473,7 @@ MempoolMonitorActionRequired ==
 \* interesting behaviors to be modelled if more elaborate monitor action is implemented
 
 MempoolMonitorAction ==
-    LET tx == CHOOSE tx \in mempool: Len(blocks) + 1 = Deadline(tx.id, tx.ds)
+    LET tx == CHOOSE tx \in mempool: Len(blocks) + 1 = Deadline(tx.id)
         txs_to_bump == { tx } \union { dptx \in mempool:
                                       /\ tx.id \in DOMAIN dependency_map
                                       /\ dptx.id = dependency_map[tx.id]
@@ -528,8 +499,7 @@ IncludeTxIntoBlock ==
 
 CanMineEmptyBlock ==
     /\ first_transaction \in ConfirmedTransactions
-    /\ LET soft_dls == UNION { { SoftDeadline(id, v.ds): v \in tx_map[id] }:
-                               id \in RemainingTransactions }
+    /\ LET soft_dls == { SoftDeadline(id): id \in RemainingTransactions }
         IN soft_dls /= {} /\ Len(blocks) + 1 < Max(soft_dls)
 
 MineTheBlock ==
@@ -605,7 +575,7 @@ ContractAction ==
     \/ AliceAction               /\ UNCHANGED blocks
     \/ BobAction                 /\ UNCHANGED blocks
     \/ IF MempoolMonitorActionRequired
-       THEN MempoolMonitorAction /\ UNCHANGED allExceptNextBlock
+       THEN MempoolMonitorAction /\ UNCHANGED unchangedByMM
        ELSE MinerAction          /\ UNCHANGED signers_map
 
 \*`^\newpage^'
@@ -616,12 +586,11 @@ ContractAction ==
 TypeOK ==
     LET TxConsistent(tx, vias) ==
             /\ tx.id \in all_transactions
-            /\ tx.ss \subseteq UNION { v.ss: v \in tx_map[tx.id] }
-            /\ tx.ds \in { v.ds: v \in tx_map[tx.id] }
-            /\ tx.to \in UNION { DstSet(tx.id, v.ds): v \in tx_map[tx.id] }
+            /\ tx.ss \subseteq tx_map[tx.id].ss
+            /\ tx.to \in DstSet(tx.id)
             /\ tx.by \in participants
             /\ tx.via \in vias
-        AllSigsPresent(tx) == tx.ss \in { v.ss: v \in tx_map[tx.id] }
+        AllSigsPresent(tx) == tx.ss = tx_map[tx.id].ss
         SigConsistent(sig) ==
             /\ sig.id \in all_transactions
             /\ sig.s \in all_sigs
@@ -682,9 +651,9 @@ NoSingleParticipantTakesAll ==
            IN Cardinality({ tx.id: tx \in txs_to_p }) <= 1
 
 TransactionTimelocksEnforced ==
-    /\ \A tx \in mempool: Len(blocks) >= TimelockExpirationHeight(tx.id, tx.ds)
+    /\ \A tx \in mempool: Len(blocks) >= TimelockExpirationHeight(tx.id)
     /\ STEALTHY_SEND_POSSIBLE
-       => \A tx \in next_block: Len(blocks) >= TimelockExpirationHeight(tx.id, tx.ds)
+       => \A tx \in next_block: Len(blocks) >= TimelockExpirationHeight(tx.id)
 
 ExpectedStateOnTimeout ==
     SwapTimedOut => RemainingTransactions \subseteq { tx_lock_B, tx_spend_B }
