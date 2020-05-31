@@ -6,23 +6,31 @@
 EXTENDS Naturals, Sequences, FiniteSets, TLC
 
 CONSTANT ALICE_IRRATIONAL \* Can alice act irrational ?
+\* When TRUE, Alice can send transactions that are unsafe to send.
 ASSUME ALICE_IRRATIONAL \in BOOLEAN
 
 CONSTANT BLOCKS_PER_DAY
+\* More blocks per day means larger state space to check
 ASSUME BLOCKS_PER_DAY >= 1
 
 \* A transaction that has no deadline can be 'stalling',
 \* i.e. not being sent while being enabled, for this number of days
 CONSTANT MAX_DAYS_STALLING
+\* More days allowed stalling means larger state space to check
 ASSUME MAX_DAYS_STALLING >= 1
 
+\* Is it possible for participants to send transactions
+\* bypassing the mempool (give directly to the miner)
 CONSTANT STEALTHY_SEND_POSSIBLE
+\* When TRUE, the state space is increased dramatically.
 ASSUME STEALTHY_SEND_POSSIBLE \in BOOLEAN
 
+\* A few generic operators
 Range(f) == { f[x] : x \in DOMAIN f }
 Min(set) == CHOOSE x \in set: \A y \in set : x <= y
 Max(set) == CHOOSE x \in set: \A y \in set : x >= y
 
+\* Operator to create transaction instances
 Tx(id, ss, by, to, via) ==
     [ id |-> id, ss |-> ss, to |-> to, by |-> by, via |-> via ]
 
@@ -69,24 +77,22 @@ nLockTime == "nLockTime"
 nSequence == "nSequence"
 NoTimelock == [ days |-> 0, type |-> nLockTime ]
 
-\* If blocks per day are low, the absolute locks
-\* need to be shifted for all contract paths to be reachable
+\* If blocks per day are low, the absolute locks need to be shifted,
+\* otherwise not all contract paths will be reachable
 ABS_LK_OFFSET == CASE BLOCKS_PER_DAY = 1 -> 2
                    [] BLOCKS_PER_DAY = 2 -> 1
                    [] OTHER              -> 0
 
-\* The map of the transactions, their possible destinations and timelocks.
+\* `tx_map' is the map of the transactions, their possible destinations and timelocks.
 
-\* Adaptor signatures are modelled by an additional value in the required signature set.
-\* For modelling purposes, the secret acts as just another sig.
-
-\* Note: `ds' stands for "destinations", `ss' for "signatures", `lk' for "lock"
+\* Adaptor signatures are modelled by an additional value in the required
+\* signature set (`ss'). For modelling purposes, the secret acts as just another sig.
+\* `ds' stands for "destinations", and  `lk' stands for "lock" (timelocks).
+\* Only blockheight-based timelocks are modelled.
 
 tx_map == [
 
     \* 'Contract' transactions -- destinations are other transactions
-
-    \* XXX items need not be sets now
 
     tx_lock_A   |-> [ds |-> { tx_success, tx_refund_1, tx_revoke, tx_spend_A },
                      ss |-> { sigAlice }],
@@ -144,7 +150,9 @@ tx_map == [
 
 all_transactions == DOMAIN tx_map
 
-\* On-chain, contract starts with Alice locking A
+\* On-chain, contract starts with Alice locking A.
+\* Defined here so that miner's actions does not need to refer to any
+\* contract-specific info, and can just refer to `first_transaction' instead.
 first_transaction == tx_lock_A
 
 ConfirmedTransactions == { tx.id: tx \in UNION Range(blocks) }
@@ -184,11 +192,12 @@ Contract == "Contract"
 DstSet(id) ==
     IF id \in ContractTransactions THEN { Contract } ELSE tx_map[id].ds
 
+\* The CASE statement has no 'OTHER' clause - only single dst is expected
 SingleDst(id) == CASE id \in ContractTransactions -> Contract
                    [] Cardinality(tx_map[id].ds) = 1
                       -> CHOOSE d \in tx_map[id].ds: TRUE
-                   \* no 'OTHER' clause - only single dst is expected
 
+\* The set of transactions conflicting with the given transaction
 ConflictingSet(id) ==
     IF id \in DOMAIN dependency_map
     THEN { dep_id \in DOMAIN dependency_map:
@@ -201,12 +210,17 @@ ASSUME \A id \in all_transactions: id \in ConflictingSet(id)
 ConfirmationHeight(id) ==
     CHOOSE bn \in DOMAIN blocks: \E tx \in blocks[bn]: tx.id = id
 
+\* All the transactions the given transaction depends on.
+\* Because each transaction can only have one dependency in our model,
+\* all dependencies form a chain, not a tree.
 RECURSIVE DependencyChain(_)
 DependencyChain(id) ==
     IF id \in DOMAIN dependency_map
     THEN { id } \union DependencyChain(dependency_map[id])
     ELSE { id }
 
+\* All the transactions that depend on the given transaction.
+\* Dependants form a tree, but the caller is interested in just a set.
 RECURSIVE AllDependants(_)
 AllDependants(id) ==
     LET dependants == tx_map[id].ds \ participants
@@ -214,10 +228,13 @@ AllDependants(id) ==
         THEN { id }
         ELSE dependants \union UNION { AllDependants(d_id): d_id \in dependants }
 
+\* All transactions that cannot ever become valid because other, conflicting
+\* transactions were confirmed befor them
 InvalidatedTransactions ==
     UNION { { c_id } \union AllDependants(c_id): c_id \in
             UNION { ConflictingSet(id) \ { id }: id \in ConfirmedTransactions } }
 
+\* All transactions that is not yet sent/confirmed, and have a chance to be.
 RemainingTransactions ==
     ((all_transactions \ ConfirmedTransactions) \ InvalidatedTransactions)
 
@@ -225,6 +242,8 @@ Timelock(id) == IF "lk" \in DOMAIN tx_map[id] THEN tx_map[id].lk ELSE NoTimelock
 
 UnreachableHeight == 2^30+(2^30-1)
 
+\* Calculate the height at which the timelock for the given transaction
+\* expires, taking BLOCKS_PER_DAY and dependencies confirmation into account
 TimelockExpirationHeight(id) ==
     LET lk == Timelock(id)
      IN CASE lk.type = nLockTime
@@ -497,6 +516,7 @@ IncludeTxIntoBlock ==
           /\ next_block' = next_block \union { tx }
     /\ UNCHANGED <<blocks, mempool, shared_knowledge>>
 
+\* Needed to restrict the state space, so that model checking is feasible
 CanMineEmptyBlock ==
     /\ first_transaction \in ConfirmedTransactions
     /\ LET soft_dls == { SoftDeadline(id): id \in RemainingTransactions }
@@ -548,6 +568,14 @@ SwapTimedOut ==
     /\ secretBob \notin signers_map[Alice]
     /\ secretBob \notin UNION { tx.ss: tx \in shared_knowledge }
 
+\* For all transactions defined by the original spec
+\* to be covered by the model, we need to also model the case
+\* where Alice misbehaves by sending transactions containing her
+\* secret after she gave `tx_success` to Bob. This behavior
+\* also enables Bob to misbehave by failing to punish Alice's
+\* misbehavior, which results in Bob losing B.
+\* The following four actions are needed to express all that.
+
 AliceLostByMisbehaving ==
     /\ HasCustody({ tx_spend_B }, Bob)
     /\ HasCustody({ tx_spend_refund_1_bob }, Bob)
@@ -561,16 +589,18 @@ BobLostByBeingLateOnRefund_2 ==
     /\ HasCustody({ tx_spend_refund_2 }, Alice)
 
 SwapUnnaturalEnding ==
-    /\ ALICE_IRRATIONAL
-    /\ \/ AliceLostByMisbehaving
-       \/ BobLostByBeingLateOnRefund_1
-       \/ BobLostByBeingLateOnRefund_2
+    \/ AliceLostByMisbehaving
+    \/ BobLostByBeingLateOnRefund_1
+    \/ BobLostByBeingLateOnRefund_2
 
+\* All possible endings of the contract
 ContractFinished == \/ SwapSuccessful
                     \/ SwapAborted
                     \/ SwapTimedOut
-                    \/ SwapUnnaturalEnding
+                    \/ ALICE_IRRATIONAL /\ SwapUnnaturalEnding
 
+\* Actions in the contract that is not yet finished. Separated into
+\* dedicated operator to be able to test `ENABLED ContractAction`
 ContractAction ==
     \/ AliceAction               /\ UNCHANGED blocks
     \/ BobAction                 /\ UNCHANGED blocks
@@ -623,9 +653,12 @@ ConsistentPhase ==
     LET phases == <<InPhase_0, InPhase_1, InPhase_2, InPhase_3>>
      IN Cardinality({ i \in DOMAIN phases: phases[i] }) = 1
 
+OnlyWhenAliceIsRational ==
+    ALICE_IRRATIONAL
+       => Assert(FALSE, "Not applicable when Alice is not rational")
+
 NoConcurrentSecretKnowledge ==
-    /\ ALICE_IRRATIONAL
-       => Print("Not applicable when Alice is not rational", FALSE)
+    /\ OnlyWhenAliceIsRational
     /\ LET SecretsShared ==
                (all_secrets \intersect UNION { tx.ss: tx \in shared_knowledge })
                \union ({ secretBob } \intersect signers_map[Alice])
@@ -633,7 +666,8 @@ NoConcurrentSecretKnowledge ==
         IN Cardinality(SecretsShared) <= 1
 
 NoUnexpectedTransactions ==
-    ~ALICE_IRRATIONAL => tx_spend_refund_1_bob \notin SentTransactions
+    /\ OnlyWhenAliceIsRational
+    /\ tx_spend_refund_1_bob \notin SentTransactions
 
 NoConflictingTransactions ==
     LET ConflictCheck(txs)==
@@ -644,8 +678,7 @@ NoConflictingTransactions ==
         /\ ConflictCheck(UNION Range(blocks) \union mempool)
 
 NoSingleParticipantTakesAll ==
-    /\ ALICE_IRRATIONAL
-       => Print("Not applicable when Alice is not rational", FALSE)
+    /\ OnlyWhenAliceIsRational
     /\ \A p \in participants:
           LET txs_to_p == { tx \in UNION Range(blocks): tx.to = p }
            IN Cardinality({ tx.id: tx \in txs_to_p }) <= 1
@@ -684,8 +717,7 @@ CounterExample == TRUE \* /\ ...
 ContractEventuallyFinished == <>ContractFinished
 
 RevokeLeadsToNonSuccess ==
-    /\ ALICE_IRRATIONAL
-       => Print("Not applicable when Alice is not rational", FALSE)
+    /\ OnlyWhenAliceIsRational
     /\ tx_revoke \in NextBlockTransactions ~> ContractFinished /\ ~SwapSuccessful
 
 \*`^\newpage^'
