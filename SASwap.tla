@@ -5,9 +5,8 @@
 
 EXTENDS Naturals, Sequences, FiniteSets, TLC
 
-CONSTANT ALICE_IRRATIONAL \* Can alice act irrational ?
-\* When TRUE, Alice can send transactions that are unsafe to send.
-ASSUME ALICE_IRRATIONAL \in BOOLEAN
+CONSTANT PARTICIPANTS_IRRATIONAL \* Can participants act irrational ?
+ASSUME PARTICIPANTS_IRRATIONAL \in BOOLEAN
 
 CONSTANT BLOCKS_PER_DAY
 \* More blocks per day means larger state space to check
@@ -354,11 +353,19 @@ SendTransaction(id, sender, to) ==
        /\ UNCHANGED <<mempool, shared_knowledge>>
 
 SendSomeTransaction(ids, sender) ==
-    \E id \in ids:
-    \E to \in (IF id \in ContractTransactions
-               THEN {Contract}
-               ELSE tx_map[id].ds \intersect { sender }):
-        SendTransaction(id, sender, to)
+    LET SendSome(filtered_ids) ==
+            \E id \in filtered_ids:
+            \E to \in (IF id \in ContractTransactions
+                       THEN {Contract}
+                       ELSE tx_map[id].ds \intersect { sender }):
+                SendTransaction(id, sender, to)
+        terminal_ids == ids \intersect TerminalTransactions
+     IN CASE PARTICIPANTS_IRRATIONAL
+             -> SendSome(ids) \* Irrational participants do no prioritization
+          [] ENABLED SendSome(terminal_ids)
+             -> SendSome(terminal_ids) \* Can send terminal tx => do it immediately
+          [] OTHER
+             -> SendSome(ids \ terminal_ids)
 
 HasCustody(ids, participant) ==
     \E id \in ids: \E tx \in UNION Range(blocks): tx.id = id /\ tx.to = participant
@@ -413,7 +420,8 @@ AliceAction ==
     LET Send(ids) == SendSomeTransaction(ids, Alice)
         Share(ids) == ShareTransactions(ids, Alice)
         SafeToSend(id) ==
-            CASE ALICE_IRRATIONAL -> TRUE \* Unsafe txs are OK for irrational Alice
+            CASE PARTICIPANTS_IRRATIONAL
+                 -> TRUE \* Unsafe txs are OK for irrational Alice
               [] id = tx_refund_1 \* Do not send refund_1 if tx_success was shared
                  -> tx_success \notin { tx.id: tx \in shared_knowledge }
               [] secretAlice \in tx_map[id].ss
@@ -585,7 +593,7 @@ SwapSuccessful ==
     /\ HasCustody({ tx_spend_B }, Alice)
     /\ \/ HasCustody({ tx_spend_A, tx_spend_success,
                        tx_spend_timeout, tx_spend_revoke }, Bob)
-       \/ /\ ALICE_IRRATIONAL
+       \/ /\ PARTICIPANTS_IRRATIONAL
           /\ HasCustody({ tx_spend_refund_1_bob }, Bob)
 
 SwapAborted ==
@@ -602,7 +610,7 @@ SwapTimedOut ==
 ContractFinished == \/ SwapSuccessful
                     \/ SwapAborted
                     \/ SwapTimedOut
-                    \/ ALICE_IRRATIONAL /\ SwapUnnaturalEnding
+                    \/ PARTICIPANTS_IRRATIONAL /\ SwapUnnaturalEnding
 
 \* Actions in the contract when it is not yet finished. Separated into
 \* dedicated operator to be able to test `ENABLED ContractAction`
@@ -656,12 +664,12 @@ ConsistentPhase ==
     LET phases == <<InPhase_0, InPhase_1, InPhase_2, InPhase_3>>
      IN Cardinality({ i \in DOMAIN phases: phases[i] }) = 1
 
-OnlyWhenAliceIsRational ==
-    ALICE_IRRATIONAL
-       => Assert(FALSE, "Not applicable when Alice is not rational")
+OnlyWhenParticipantsAreRational ==
+    PARTICIPANTS_IRRATIONAL
+       => Assert(FALSE, "Not applicable when participants are not rational")
 
 NoConcurrentSecretKnowledge ==
-    /\ OnlyWhenAliceIsRational
+    /\ OnlyWhenParticipantsAreRational
     /\ LET SecretsShared ==
                (all_secrets \intersect UNION { tx.ss: tx \in shared_knowledge })
                \union ({ secretBob } \intersect signers_map[Alice])
@@ -669,7 +677,7 @@ NoConcurrentSecretKnowledge ==
         IN Cardinality(SecretsShared) <= 1
 
 NoUnexpectedTransactions ==
-    /\ OnlyWhenAliceIsRational
+    /\ OnlyWhenParticipantsAreRational
     /\ tx_spend_refund_1_bob \notin SentTransactions
 
 NoConflictingTransactions ==
@@ -681,7 +689,7 @@ NoConflictingTransactions ==
         /\ ConflictCheck(UNION Range(blocks) \union mempool)
 
 NoSingleParticipantTakesAll ==
-    /\ OnlyWhenAliceIsRational
+    /\ OnlyWhenParticipantsAreRational
     /\ \A p \in participants:
           LET txs_to_p == { tx \in UNION Range(blocks): tx.to = p }
            IN Cardinality({ tx.id: tx \in txs_to_p }) <= 1
@@ -719,10 +727,6 @@ CounterExample == TRUE \* /\ ...
 (***********************)
 
 ContractEventuallyFinished == <>ContractFinished
-
-RevokeLeadsToNonSuccess ==
-    /\ OnlyWhenAliceIsRational
-    /\ tx_revoke \in NextBlockTransactions ~> ContractFinished /\ ~SwapSuccessful
 
 \*`^\newpage^'
 (***************)
