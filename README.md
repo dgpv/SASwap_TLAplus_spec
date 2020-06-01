@@ -114,11 +114,14 @@ run `make pdf` to generate PDF file for the TLA+ specification
 (you need pdflatex to be in your `PATH` for that)
 
 Note that when running checking from the command line, you will
-not be able to do the exploration of the state log in case some
+not be able to do convenient exploration of the state log in case some
 invariant or temporal property is violated. TLA+ toolbox has
 the functionality where you can evaluate TLA+ expressions in
 the context of each state in the log, but there are currently
 no tools to do this from the command line or with text UI.
+
+Note that there is a way to evaluate TLA+ expressions on the error
+trace without the toolbox, see the screencast at https://asciinema.org/a/321778#
 
 ## Authors and contributors
 
