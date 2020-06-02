@@ -1,12 +1,12 @@
 ---------------------------- MODULE HyperProperties ----------------------------
 EXTENDS SASwap, TLC
 
-slot_confpairs     == 0
-slot_min_dls       == 1
-slot_max_soft_dls  == 2
+slot_confirmed    == 0
+slot_min_dls      == 1
+slot_max_soft_dls == 2
 slot_lock_B_last  == 3
 
-ASSUME TLCSet(slot_confpairs, {})
+ASSUME TLCSet(slot_confirmed, {})
 ASSUME TLCSet(slot_min_dls, [ id \in all_transactions |-> UnreachableHeight ])
 ASSUME TLCSet(slot_max_soft_dls, [ id \in all_transactions |-> 0 ])
 ASSUME TLCSet(slot_lock_B_last, 0)
@@ -16,9 +16,9 @@ ASSUME TLCSet(slot_lock_B_last, 0)
 \* some useful data.
 
 ShowConfirmed ==
-    \/ LET diff == ConfirmedTransactions \ TLCGet(slot_confpairs)
-        IN {} /= diff => /\ TLCSet(slot_confpairs,
-                                   TLCGet(slot_confpairs) \union ConfirmedTransactions)
+    \/ LET diff == ConfirmedTransactions \ TLCGet(slot_confirmed)
+        IN {} /= diff => /\ TLCSet(slot_confirmed,
+                                   TLCGet(slot_confirmed) \union ConfirmedTransactions)
                          /\ PrintT(diff)
     \/ TRUE
 
@@ -47,5 +47,18 @@ ShowLastBlockToLockB ==
               prev_lbb == TLCGet(slot_lock_B_last)
            IN lbb > prev_lbb => TLCSet(slot_lock_B_last, lbb) /\ PrintT(<<"LBB", lbb>>)
     \/ TRUE
+
+PostConditionForConfirmed ==
+    LET actual_confirmed == TLCGet(slot_confirmed)
+        expected_confirmed == IF PARTICIPANTS_IRRATIONAL
+                                 THEN all_transactions
+                                 ELSE all_transactions \ {tx_spend_refund_1_bob}
+     IN \/ actual_confirmed = expected_confirmed
+        \/ Print(<<"Unexpected difference in confirmed transactions",
+                    "confirmed but unexpected:",
+                    actual_confirmed \ expected_confirmed,
+                    "expected but not confirmed:",
+                    expected_confirmed \ actual_confirmed>>,
+                 FALSE)
 
 =============================================================================

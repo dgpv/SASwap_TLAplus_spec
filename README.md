@@ -63,6 +63,8 @@ the identifiers of the transactions that ever become confirmed in some
 execution path. This way, an observer can make sure that the model
 checking explores all relevant points.
 
+Since TLC commit [ced9269895aa6b760fa7d7a35fa61b43eb2a9a0a](https://github.com/tlaplus/tlaplus/commit/ced9269895aa6b760fa7d7a35fa61b43eb2a9a0a), it is possible to automatically check hyperproperties. See `PostConditionForConfirmed` in `HyperProperties.tla` and `SASwap.cfg`.
+
 ## Limitations
 
 #### Only one miner in the model, so no reorgs
