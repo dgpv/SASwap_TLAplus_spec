@@ -1,15 +1,17 @@
 ---------------------------- MODULE HyperProperties ----------------------------
-EXTENDS SASwap, TLC
+EXTENDS SASwap_ZmnSCPxj, TLC
 
-slot_confirmed    == 0
-slot_min_dls      == 1
-slot_max_soft_dls == 2
-slot_lock_B_last  == 3
+slot_confirmed      == 0
+slot_min_dls        == 1
+slot_max_soft_dls   == 2
+slot_lock_B_last    == 3
+slot_conf_on_finish == 4
 
 ASSUME TLCSet(slot_confirmed, {})
 ASSUME TLCSet(slot_min_dls, [ id \in all_transactions |-> UnreachableHeight ])
 ASSUME TLCSet(slot_max_soft_dls, [ id \in all_transactions |-> 0 ])
 ASSUME TLCSet(slot_lock_B_last, 0)
+ASSUME TLCSet(slot_conf_on_finish, {})
 
 \* The following actions can be used as 'CONSTRAINTS', but they will not
 \* restrict the state space or actions, they can just collect and/or print
@@ -20,6 +22,19 @@ ShowConfirmed ==
         IN {} /= diff => /\ TLCSet(slot_confirmed,
                                    TLCGet(slot_confirmed) \union ConfirmedTransactions)
                          /\ PrintT(diff)
+    \/ TRUE
+
+ShowConfirmedSetOnFinish ==
+    \/ LET ConfPairs == {<<tx.id, tx.to>>: tx \in UNION Range(blocks)}
+           FinState ==
+                CASE SwapSuccessful      -> <<"Success",   ConfPairs>>
+                  [] SwapAborted         -> <<"Abort",     ConfPairs>>
+                  [] SwapUnnaturalEnding -> <<"Unnatural", ConfPairs>>
+        IN ContractFinished
+           => (FinState \notin TLCGet(slot_conf_on_finish)
+              => /\ TLCSet(slot_conf_on_finish, TLCGet(slot_conf_on_finish)
+                                                \union {FinState})
+                 /\ PrintT(FinState))
     \/ TRUE
 
 ShowMinDeadlinesOp(DeadlineOp(_), ReduceOp(_), tlc_slot) ==
@@ -50,15 +65,13 @@ ShowLastBlockToLockB ==
 
 PostConditionForConfirmed ==
     LET actual_confirmed == TLCGet(slot_confirmed)
-        expected_confirmed == IF PARTICIPANTS_IRRATIONAL
-                                 THEN all_transactions
-                                 ELSE all_transactions \ {tx_spend_refund_1_bob}
-     IN \/ actual_confirmed = expected_confirmed
+     IN \/ actual_confirmed = all_transactions
         \/ Print(<<"Unexpected difference in confirmed transactions",
                     "confirmed but unexpected:",
-                    actual_confirmed \ expected_confirmed,
+                    actual_confirmed \ all_transactions,
                     "expected but not confirmed:",
-                    expected_confirmed \ actual_confirmed>>,
+                    all_transactions \ actual_confirmed>>,
                  FALSE)
+
 
 =============================================================================

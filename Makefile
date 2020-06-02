@@ -1,4 +1,4 @@
-NAME = SASwap
+NAME = SASwap_ZmnSCPxj
 
 ifeq (${NUM_WORKERS},)
 NUM_WORKERS = 1

@@ -1,5 +1,7 @@
 # TLA+ specification for Succinct Atomic Swap smart contract
 
+Variant suggested by ZmnSCPxj at https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2020-May/017850.html
+
 This repository contains the [TLA+](https://lamport.azurewebsites.net/tla/tla.html)
 specification of the smart contract for Succinct Atomic Swaps
 that can be implemented on the blockchain platform that uses UTXO model

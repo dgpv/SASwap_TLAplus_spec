@@ -1,4 +1,4 @@
--------------------------------- MODULE SASwap ---------------------------------
+--------------------------- MODULE SASwap_ZmnSCPxj -----------------------------
 \* `.SASwap TLA+ specification (c) by Dmitry Petukhov (https://github.com/dgpv)
 \* `.Licensed under a Creative Commons Attribution-ShareAlike 4.0 International
 \* `.License <http://creativecommons.org/licenses/by-sa/4.0/>
@@ -34,10 +34,11 @@ VARIABLE mempool           \* {Tx, ...}
 VARIABLE shared_knowledge  \* {Tx, ...}
 VARIABLE signers_map       \* [participant |-> {allowed_sig, ...}]
 VARIABLE per_block_enabled \* <<{Tx, ...}, ...>>
+VARIABLE wont_send         \* {id, ...}
 
 fullState  == <<blocks, next_block, signers_map, shared_knowledge, mempool,
-                per_block_enabled>>
-unchangedByMM  == <<blocks, signers_map, shared_knowledge, mempool>>
+                per_block_enabled, wont_send>>
+unchangedByMM  == <<blocks, signers_map, shared_knowledge, mempool, wont_send>>
 
 \* A few generic operators
 Range(f) == { f[x] : x \in DOMAIN f }
@@ -57,27 +58,21 @@ secretBob   == "secretBob"
 all_secrets == { secretAlice, secretBob }
 all_sigs    == { sigAlice, sigBob, secretAlice, secretBob }
 
-tx_lock_A               == "tx_lock_A"
-tx_lock_B               == "tx_lock_B"
-tx_success              == "tx_success"
-tx_refund_1             == "tx_refund_1"
-tx_revoke               == "tx_revoke"
-tx_refund_2             == "tx_refund_2"
-tx_timeout              == "tx_timeout"
-tx_spend_A              == "tx_spend_A"
-tx_spend_B              == "tx_spend_B"
-tx_spend_success        == "tx_spend_success"
-tx_spend_refund_1_alice == "tx_spend_refund_1_alice"
-tx_spend_refund_1_bob   == "tx_spend_refund_1_bob"
-tx_spend_revoke         == "tx_spend_revoke"
-tx_spend_refund_2       == "tx_spend_refund_2"
-tx_spend_timeout        == "tx_spend_timeout"
+tx_lock_A         == "tx_lock_A"
+tx_lock_B         == "tx_lock_B"
+tx_success        == "tx_success"
+tx_refund_1       == "tx_refund_1"
+tx_timeout        == "tx_timeout"
+tx_spend_A        == "tx_spend_A"
+tx_spend_B        == "tx_spend_B"
+tx_spend_success  == "tx_spend_success"
+tx_spend_refund_1 == "tx_spend_refund_1"
+tx_spend_timeout  == "tx_spend_timeout"
 
 nLockTime == "nLockTime"
 nSequence == "nSequence"
 NoTimelock == [ days |-> 0, type |-> nLockTime ]
 
-\* `^\newpage^'
 \* If blocks per day are low, the absolute locks need to be shifted,
 \* otherwise not all contract paths will be reachable
 ABS_LK_OFFSET == CASE BLOCKS_PER_DAY = 1 -> 2
@@ -93,7 +88,7 @@ tx_map == [
 
     \* 'Contract' transactions -- destinations are other transactions
 
-    tx_lock_A   |-> [ds |-> { tx_success, tx_refund_1, tx_revoke, tx_spend_A },
+    tx_lock_A   |-> [ds |-> { tx_success, tx_refund_1, tx_timeout, tx_spend_A },
                      ss |-> { sigAlice }],
 
     tx_lock_B   |-> [ds |-> { tx_spend_B },
@@ -102,48 +97,30 @@ tx_map == [
     tx_success  |-> [ds |-> { tx_spend_success },
                      ss |-> { sigAlice, sigBob, secretBob }],
 
-    tx_refund_1 |-> [ds |-> { tx_spend_refund_1_bob, tx_spend_refund_1_alice },
+    tx_refund_1 |-> [ds |-> { tx_spend_refund_1 },
                      ss |-> { sigAlice, sigBob, secretAlice },
                      lk |-> [ days |-> ABS_LK_OFFSET + 1, type |-> nLockTime ]],
 
-    tx_revoke   |-> [ds |-> { tx_refund_2, tx_timeout, tx_spend_revoke },
-                     ss |-> { sigAlice, sigBob },
-                     lk |-> [ days |-> ABS_LK_OFFSET + 2, type |-> nLockTime ]],
-
-    tx_refund_2 |-> [ds |-> { tx_spend_refund_2 },
-                     ss |-> { sigAlice, sigBob, secretAlice },
-                     lk |-> [ days |-> 1, type |-> nSequence ]],
-
     tx_timeout  |-> [ds |-> { tx_spend_timeout },
-                     ss |-> { sigAlice, sigBob },
-                     lk |-> [ days |-> 2, type |-> nSequence ]],
+                     ss |-> { sigAlice, sigBob, secretBob},
+                     lk |-> [ days |-> ABS_LK_OFFSET + 2, type |-> nLockTime ]],
 
     \* 'Terminal' transactions -- destinations are participants
 
-    tx_spend_A              |-> [ds |-> { Alice, Bob },
-                                 ss |-> { sigAlice, sigBob }],
+    tx_spend_A        |-> [ds |-> { Alice, Bob },
+                           ss |-> { sigAlice, sigBob }],
 
-    tx_spend_B              |-> [ds |-> { Alice, Bob },
-                                 ss |-> { secretAlice, secretBob }],
+    tx_spend_B        |-> [ds |-> { Alice, Bob },
+                           ss |-> { secretAlice, secretBob }],
 
-    tx_spend_success        |-> [ds |-> { Bob },
-                                 ss |-> { sigBob }],
+    tx_spend_success  |-> [ds |-> { Bob },
+                           ss |-> { sigBob }],
 
-    tx_spend_refund_1_bob   |-> [ds |-> { Bob },
-                                 ss |-> { sigAlice, sigBob }],
+    tx_spend_refund_1 |-> [ds |-> { Alice },
+                           ss |-> { sigAlice } ],
 
-    tx_spend_refund_1_alice |-> [ds |-> { Alice },
-                                 ss |-> { sigAlice },
-                                 lk |-> [ days |-> 1, type |-> nSequence ]],
-
-    tx_spend_revoke         |-> [ds |-> { Alice, Bob },
-                                 ss |-> { sigAlice, sigBob }],
-
-    tx_spend_refund_2       |-> [ds |-> { Alice },
-                                 ss |-> { sigAlice }],
-
-    tx_spend_timeout        |-> [ds |-> { Bob },
-                                 ss |-> { sigBob }]
+    tx_spend_timeout  |-> [ds |-> { Bob },
+                           ss |-> { sigBob }]
 ]
 
 all_transactions == DOMAIN tx_map
@@ -239,7 +216,6 @@ Timelock(id) == IF "lk" \in DOMAIN tx_map[id] THEN tx_map[id].lk ELSE NoTimelock
 
 UnreachableHeight == 2^30+(2^30-1)
 
-\* `^\newpage^'
 \* Calculate the height at which the timelock for the given transaction
 \* expires, taking BLOCKS_PER_DAY and dependencies confirmation into account
 TimelockExpirationHeight(id) ==
@@ -256,7 +232,7 @@ TimelockExpirationHeight(id) ==
 \* the transaction after the deadline
 Deadline(id) ==
     LET hs == { TimelockExpirationHeight(c_id):
-                c_id \in ConflictingSet(id) \ { id } }
+                c_id \in (ConflictingSet(id) \ { id }) \ wont_send }
         higher_hs == { h \in hs: h > TimelockExpirationHeight(id) }
      IN IF higher_hs = {}
         THEN UnreachableHeight
@@ -311,7 +287,6 @@ ShareTransactions(ids, by) ==
      IN /\ ShareKnowledge(txs)
         /\ shared_knowledge' /= shared_knowledge \* not a new knowledge => fail
 
-\* `^\newpage^'
 \* Txs enabled at the current cycle, used to update per_block_enabled vector
 NewlyEnabledTxs ==
     { tx \in
@@ -345,7 +320,6 @@ SendTransactionToMiner(id, sender, to) ==
        IN /\ IsSpendableTx(tx, NextBlockConfirmedTransactions)
           /\ next_block' = next_block \union { tx }
 
-\* `^\newpage^'
 SendTransaction(id, sender, to) ==
     \/ /\ SendTransactionToMempool(id, sender, to)
        /\ UNCHANGED next_block
@@ -354,7 +328,7 @@ SendTransaction(id, sender, to) ==
 
 SendSomeTransaction(ids, sender) ==
     LET SendSome(filtered_ids) ==
-            \E id \in filtered_ids:
+            \E id \in filtered_ids \ wont_send:
             \E to \in (IF id \in ContractTransactions
                        THEN {Contract}
                        ELSE tx_map[id].ds \intersect { sender }):
@@ -373,43 +347,9 @@ HasCustody(ids, participant) ==
 \* Sharing secrets or keys has to occur before deadline to send tx_success
 TooLateToShare == Len(blocks) >= Deadline(tx_success)
 
-\* `^\newpage^'
 (***********************)
 (* Participant actions *)
 (***********************)
-
-\* Transactions Alice initially shares signatures on
-phase0_to_share_Alice == { tx_revoke, tx_timeout }
-
-\* Transactions Bob initially shares signatures on
-phase0_to_share_Bob == { tx_refund_1, tx_revoke, tx_refund_2, tx_timeout }
-
-\* Conditions to divide the contract execution into phases according to original spec
-
-Phase_3_cond == tx_lock_B \in ConfirmedTransactions
-Phase_2_cond == tx_lock_A \in ConfirmedTransactions
-Phase_1_cond ==
-    /\ \A id \in phase0_to_share_Alice:
-           \E tx \in shared_knowledge: tx.id = id /\ sigAlice \in tx.ss
-    /\ \A id \in phase0_to_share_Bob:
-           \E tx \in shared_knowledge: tx.id = id /\ sigBob \in tx.ss
-
-InPhase_3 ==
-    /\ Phase_3_cond
-
-InPhase_2 ==
-    /\ Phase_2_cond
-    /\ ~Phase_3_cond
-
-InPhase_1 ==
-    /\ Phase_1_cond
-    /\ ~Phase_2_cond
-    /\ ~Phase_3_cond
-
-InPhase_0 ==
-    /\ ~Phase_1_cond
-    /\ ~Phase_2_cond
-    /\ ~Phase_3_cond
 
 \* Helper operators to declutter the action expressions
 NoSending == UNCHANGED <<mempool, next_block>>
@@ -422,61 +362,50 @@ AliceAction ==
         SafeToSend(id) ==
             CASE PARTICIPANTS_IRRATIONAL
                  -> TRUE \* Unsafe txs are OK for irrational Alice
-              [] id = tx_refund_1 \* Do not send refund_1 if tx_success was shared
-                 -> tx_success \notin { tx.id: tx \in shared_knowledge }
               [] secretAlice \in tx_map[id].ss
-                 \* Once Alice received secretBob, should never send out secretAlice
-                 -> \/ secretBob \notin signers_map[Alice]
+                 \* Once Alice shared tx_success, should never send out secretAlice
+                 -> \/ tx_success \notin {tx.id: tx \in shared_knowledge}
                     \/ id = tx_spend_B \* unless this is a transaction to get B
                                        \* which does not in fact expose secrets
               [] OTHER -> TRUE
-     IN \/ /\ InPhase_0
-           /\ Share(phase0_to_share_Alice)
-           /\ NoSending /\ NoKeysShared
-        \/ /\ InPhase_1
-           /\ Send({ tx_lock_A })
+     IN \/ /\ Send({ id \in RemainingTransactions: SafeToSend(id) })
            /\ NoKeysShared
-        \/ /\ InPhase_2 \* Just waiting for Bob to lock B
-           /\ NoSending /\ NoKnowledgeShared /\ NoKeysShared
-        \/ /\ InPhase_3
-           /\ \/ /\ secretBob \in signers_map[Alice] \* Bob gave Alice his secret
-                 /\ sigAlice \notin signers_map[Bob] \* Alice did not yet gave Bob her key
-                 /\ ~TooLateToShare
-                 /\ signers_map' = [signers_map  \* Give Alice's key to Bob
-                                    EXCEPT ![Bob] = @ \union { sigAlice }]
-                 /\ NoSending /\ NoKnowledgeShared
-              \/ /\ tx_refund_1 \notin SentTransactions
-                 /\ ~TooLateToShare
-                 /\ Share({ tx_success }) \* refund_1 not sent yet, can share
-                 /\ NoSending /\ NoKeysShared
-              \/ /\ Send({ id \in RemainingTransactions: SafeToSend(id) })
-                 /\ NoKeysShared
-
-\* `^\newpage^'
+        \/ /\ { tx_lock_A, tx_lock_B } \subseteq ConfirmedTransactions
+           /\ ~({tx_success, tx_timeout} \subseteq {tx.id: tx \in shared_knowledge})
+           /\ Share({ tx_success, tx_timeout })
+           /\ NoSending /\ NoKeysShared
+        \/ /\ { tx_lock_A, tx_lock_B } \subseteq ConfirmedTransactions
+           /\ {tx_success, tx_refund_1, tx_timeout} \subseteq {tx.id: tx \in shared_knowledge}
+           /\ secretBob \in signers_map[Alice] \* Bob gave Alice his secret
+           /\ sigAlice \notin signers_map[Bob] \* Alice did not yet gave Bob her key
+           /\ ~TooLateToShare
+           /\ signers_map' = [signers_map  \* Give Alice's key to Bob
+                              EXCEPT ![Bob] = @ \union { sigAlice }]
+           /\ NoSending /\ NoKnowledgeShared
 
 BobAction ==
     LET Send(ids) == SendSomeTransaction(ids, Bob)
         Share(ids) == ShareTransactions(ids, Bob)
         tx_success_sigs == SigsAvailable(tx_success, Bob, Contract)
-     IN \/ /\ InPhase_0
-           /\ Share(phase0_to_share_Bob)
+     IN \/ /\ Send(RemainingTransactions)
+           /\ NoKeysShared /\ UNCHANGED wont_send
+        \/ /\ tx_refund_1 \notin {tx.id: tx \in shared_knowledge}
+           /\ tx_success \notin SentTransactions
+           /\ tx_timeout \notin SentTransactions
+           /\ Share({ tx_refund_1 })
+           /\ wont_send' = wont_send \union {tx_timeout}
            /\ NoSending /\ NoKeysShared
-        \/ /\ InPhase_1 \* Just waiting for Alice to lock A
-           /\ NoSending /\ NoKnowledgeShared /\ NoKeysShared
-        \/ /\ \/ InPhase_2
-              \/ InPhase_3
-           /\ \/ /\ sigAlice \in tx_success_sigs
-                    \* If Bob already knows secretAlice, he doesn't need to share secretBob
-                 /\ secretAlice \notin tx_success_sigs
-                 /\ secretBob \notin signers_map[Alice]
-                 /\ ~TooLateToShare
-                 /\ signers_map' = [signers_map \* Give secretBob to Alice
-                                    EXCEPT ![Alice] = @ \union { secretBob }]
-                 /\ NoSending /\ NoKnowledgeShared
-              \/ /\ Send(RemainingTransactions)
-                 /\ NoKeysShared
-
-\*`^\newpage^'
+        \/ /\ { tx_lock_A, tx_lock_B } \subseteq ConfirmedTransactions
+           /\ {tx_success, tx_refund_1, tx_timeout} \subseteq {tx.id: tx \in shared_knowledge}
+           /\ tx_success \notin SentTransactions
+           /\ tx_timeout \notin SentTransactions
+           /\ secretAlice \notin tx_success_sigs
+           /\ secretBob \notin signers_map[Alice]
+           /\ ~TooLateToShare
+           /\ signers_map' = [signers_map \* Give secretBob to Alice
+                              EXCEPT ![Alice] = @ \union { secretBob }]
+           /\ wont_send' = wont_send \ {tx_timeout}
+           /\ NoSending /\ NoKnowledgeShared
 
 MempoolMonitorActionRequired ==
     \E tx \in mempool: /\ Len(blocks) + 1 = Deadline(tx.id)
@@ -511,7 +440,6 @@ MempoolMonitorAction ==
                      UNION { ConflictingSet(bmptx.id): bmptx \in txs_to_bump } }
             \union { [bmptx EXCEPT !.via = "fee-bump"]: bmptx \in txs_to_bump }
 
-\*`^\newpage^'
 (****************)
 (* Miner action *)
 (****************)
@@ -558,70 +486,37 @@ UpdateEnabledPerBlock ==
 (* High-level contract spec *)
 (****************************)
 
-\* First, the 'unnatural' cases.
-
-\* For all transactions defined by the original spec
-\* to be covered by the model, we need to also model the case
-\* where Alice misbehaves by sending transactions containing her
-\* secret after she gave `tx_success` to Bob. This behavior
-\* also enables Bob to misbehave by failing to punish Alice's
-\* misbehavior, which results in Bob losing B.
-\* The following four actions are needed to express all that.
-
-AliceLostByMisbehaving ==
-    /\ HasCustody({ tx_spend_B }, Bob)
-    /\ HasCustody({ tx_spend_refund_1_bob }, Bob)
-
-BobLostByBeingLateOnRefund_1 ==
+BobLostByBeingLateOnSuccess ==
     /\ HasCustody({ tx_spend_B }, Alice)
-    /\ HasCustody({ tx_spend_refund_1_alice }, Alice)
+    /\ HasCustody({ tx_spend_refund_1 }, Alice)
 
-BobLostByBeingLateOnRefund_2 ==
-    /\ HasCustody({ tx_spend_B }, Alice)
-    /\ HasCustody({ tx_spend_refund_2 }, Alice)
-
-SwapUnnaturalEnding ==
-    \/ AliceLostByMisbehaving
-    \/ BobLostByBeingLateOnRefund_1
-    \/ BobLostByBeingLateOnRefund_2
-
-\*`^\newpage^'
+SwapUnnaturalEnding == BobLostByBeingLateOnSuccess 
 
 \* The normal, 'natural' cases.
 
 SwapSuccessful ==
     /\ HasCustody({ tx_spend_B }, Alice)
-    /\ \/ HasCustody({ tx_spend_A, tx_spend_success,
-                       tx_spend_timeout, tx_spend_revoke }, Bob)
-       \/ /\ PARTICIPANTS_IRRATIONAL
-          /\ HasCustody({ tx_spend_refund_1_bob }, Bob)
+    /\ HasCustody({ tx_spend_A, tx_spend_success, tx_spend_timeout }, Bob)
 
 SwapAborted ==
-    /\ HasCustody({ tx_spend_A, tx_spend_refund_1_alice, tx_spend_refund_2 }, Alice)
-    /\ HasCustody({ tx_spend_B }, Bob)
-
-SwapTimedOut ==
-    /\ tx_spend_timeout \in ConfirmedTransactions
-       \* Alice can't claim tx_spend_B on timeout
-    /\ secretBob \notin signers_map[Alice]
-    /\ secretBob \notin UNION { tx.ss: tx \in shared_knowledge }
+    /\ HasCustody({ tx_spend_A, tx_spend_refund_1 }, Alice)
+    /\ \/ HasCustody({ tx_spend_B }, Bob)
+       \/ tx_lock_B \notin SentTransactions
 
 \* All possible endings of the contract
 ContractFinished == \/ SwapSuccessful
                     \/ SwapAborted
-                    \/ SwapTimedOut
                     \/ PARTICIPANTS_IRRATIONAL /\ SwapUnnaturalEnding
 
 \* Actions in the contract when it is not yet finished. Separated into
 \* dedicated operator to be able to test `ENABLED ContractAction`
 ContractAction ==
-    \/ AliceAction               /\ UNCHANGED blocks
+    \/ AliceAction               /\ UNCHANGED <<blocks, wont_send>>
     \/ BobAction                 /\ UNCHANGED blocks
     \/ IF MempoolMonitorActionRequired
        THEN MempoolMonitorAction /\ UNCHANGED unchangedByMM
-       ELSE MinerAction          /\ UNCHANGED signers_map
+       ELSE MinerAction          /\ UNCHANGED <<signers_map, wont_send>>
 
-\*`^\newpage^'
 (***************)
 (* Invariants  *)
 (***************)
@@ -660,10 +555,6 @@ TypeOK ==
               \/ p \in participants /\ \A sig \in signers_map[p]: sig \in all_sigs
               \/ Print(<<"~TypeOK signers_map", p>>, FALSE)
 
-ConsistentPhase ==
-    LET phases == <<InPhase_0, InPhase_1, InPhase_2, InPhase_3>>
-     IN Cardinality({ i \in DOMAIN phases: phases[i] }) = 1
-
 OnlyWhenParticipantsAreRational ==
     PARTICIPANTS_IRRATIONAL
        => Assert(FALSE, "Not applicable when participants are not rational")
@@ -675,10 +566,6 @@ NoConcurrentSecretKnowledge ==
                \union ({ secretBob } \intersect signers_map[Alice])
                \union ({ secretAlice } \intersect signers_map[Bob])
         IN Cardinality(SecretsShared) <= 1
-
-NoUnexpectedTransactions ==
-    /\ OnlyWhenParticipantsAreRational
-    /\ tx_spend_refund_1_bob \notin SentTransactions
 
 NoConflictingTransactions ==
     LET ConflictCheck(txs)==
@@ -699,24 +586,16 @@ TransactionTimelocksEnforced ==
     /\ STEALTHY_SEND_POSSIBLE
        => \A tx \in next_block: Len(blocks) >= TimelockExpirationHeight(tx.id)
 
-\*`^\newpage^'
-ExpectedStateOnTimeout ==
-    SwapTimedOut => RemainingTransactions \subseteq { tx_lock_B, tx_spend_B }
+ExpectedStateOnAbort ==
+    SwapAborted
+    => LET ids_left == IF ENABLED ContractAction THEN { tx_lock_B } ELSE {}
+        IN RemainingTransactions \subseteq { tx_spend_B } \union ids_left
 
-ExpectedStateOnFinish ==
-    ContractFinished =>
-        IF SwapTimedOut
-        THEN LET ids_left == IF ENABLED ContractAction THEN { tx_lock_B } ELSE {}
-              IN /\ RemainingTransactions = { tx_spend_B } \union ids_left
-                 /\ MempoolTransactions \subseteq ids_left
-                 /\ NextBlockTransactions \subseteq ids_left
-        ELSE /\ ~ENABLED ContractAction
-             /\ RemainingTransactions = {}
-             /\ mempool = {}
-             /\ next_block = {}
-
-NoTransactionsRemaining_iff_NotTimedOut ==
-    {} = RemainingTransactions <=> ContractFinished /\ ~SwapTimedOut
+ExpectedStateOnSuccess ==
+    SwapSuccessful => /\ ~ENABLED ContractAction \/ Print(<<ENABLED AliceAction, ENABLED BobAction, RemainingTransactions>>, FALSE)
+                      /\ RemainingTransactions = {}
+                      /\ mempool = {}
+                      /\ next_block = {}
 
 \* Can use this invariant to check if certain state can be reached.
 \* If the CounterExample invariant is violated, then the state has been reached.
@@ -728,7 +607,6 @@ CounterExample == TRUE \* /\ ...
 
 ContractEventuallyFinished == <>ContractFinished
 
-\*`^\newpage^'
 (***************)
 (* Init & Next *)
 (***************)
@@ -739,6 +617,7 @@ Init ==
     /\ next_block = {}
     /\ mempool = {}
     /\ shared_knowledge = {}
+    /\ wont_send = {}
     /\ signers_map = [Alice |-> { sigAlice, secretAlice },
                       Bob   |-> { sigBob, secretBob }]
 
