@@ -490,11 +490,15 @@ UpdateEnabledPerBlock ==
 (* High-level contract spec *)
 (****************************)
 
+AliceLostByMisbehaving ==
+    /\ HasCustody({ tx_spend_B }, Bob)
+    /\ HasCustody({ tx_spend_success, tx_spend_timeout }, Bob)
+
 BobLostByBeingLateOnSuccess ==
     /\ HasCustody({ tx_spend_B }, Alice)
     /\ HasCustody({ tx_spend_refund_1 }, Alice)
 
-SwapUnnaturalEnding == BobLostByBeingLateOnSuccess 
+SwapUnnaturalEnding == BobLostByBeingLateOnSuccess \/ AliceLostByMisbehaving
 
 \* The normal, 'natural' cases.
 
@@ -507,6 +511,8 @@ SwapAborted ==
     /\ \/ HasCustody({ tx_spend_B }, Bob)
        \/ tx_lock_B \notin SentTransactions
 
+\* Deadlock is possible by design.
+\* See https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2020-June/017918.html
 SwapDeadlocked ==
     LET stx == Tx(tx_success, tx_map[tx_success].ss, Bob, Contract, "test")
         rtx == Tx(tx_refund_1, tx_map[tx_refund_1].ss, Alice, Contract, "test")
