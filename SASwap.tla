@@ -437,7 +437,8 @@ AliceAction ==
            /\ Send({ tx_lock_A })
            /\ NoKeysShared
         \/ /\ InPhase_2 \* Just waiting for Bob to lock B
-           /\ NoSending /\ NoKnowledgeShared /\ NoKeysShared
+           /\ Send({ id \in RemainingTransactions: SafeToSend(id) })
+           /\ NoKeysShared
         \/ /\ InPhase_3
            /\ \/ /\ secretBob \in signers_map[Alice] \* Bob gave Alice his secret
                  /\ sigAlice \notin signers_map[Bob] \* Alice did not yet gave Bob her key
@@ -452,8 +453,6 @@ AliceAction ==
               \/ /\ Send({ id \in RemainingTransactions: SafeToSend(id) })
                  /\ NoKeysShared
 
-\* `^\newpage^'
-
 BobAction ==
     LET Send(ids) == SendSomeTransaction(ids, Bob)
         Share(ids) == ShareTransactions(ids, Bob)
@@ -463,8 +462,10 @@ BobAction ==
            /\ NoSending /\ NoKeysShared
         \/ /\ InPhase_1 \* Just waiting for Alice to lock A
            /\ NoSending /\ NoKnowledgeShared /\ NoKeysShared
-        \/ /\ \/ InPhase_2
-              \/ InPhase_3
+        \/ /\ InPhase_2
+           /\ Send({ tx_lock_B })
+           /\ NoKeysShared
+        \/ /\ InPhase_3
            /\ \/ /\ sigAlice \in tx_success_sigs
                     \* If Bob already knows secretAlice, he doesn't need to share secretBob
                  /\ secretAlice \notin tx_success_sigs
@@ -598,7 +599,8 @@ SwapSuccessful ==
 
 SwapAborted ==
     /\ HasCustody({ tx_spend_A, tx_spend_refund_1_alice, tx_spend_refund_2 }, Alice)
-    /\ HasCustody({ tx_spend_B }, Bob)
+    /\ \/ HasCustody({ tx_spend_B }, Bob)
+       \/ tx_lock_B \notin SentTransactions
 
 SwapTimedOut ==
     /\ tx_spend_timeout \in ConfirmedTransactions
@@ -700,23 +702,16 @@ TransactionTimelocksEnforced ==
        => \A tx \in next_block: Len(blocks) >= TimelockExpirationHeight(tx.id)
 
 \*`^\newpage^'
-ExpectedStateOnTimeout ==
-    SwapTimedOut => RemainingTransactions \subseteq { tx_lock_B, tx_spend_B }
+ExpectedStateOnAbortOrTimeout ==
+    SwapAborted \/ SwapTimedOut
+    => LET ids_left == IF ENABLED ContractAction THEN { tx_lock_B } ELSE {}
+        IN RemainingTransactions \subseteq { tx_spend_B } \union ids_left
 
-ExpectedStateOnFinish ==
-    ContractFinished =>
-        IF SwapTimedOut
-        THEN LET ids_left == IF ENABLED ContractAction THEN { tx_lock_B } ELSE {}
-              IN /\ RemainingTransactions = { tx_spend_B } \union ids_left
-                 /\ MempoolTransactions \subseteq ids_left
-                 /\ NextBlockTransactions \subseteq ids_left
-        ELSE /\ ~ENABLED ContractAction
-             /\ RemainingTransactions = {}
-             /\ mempool = {}
-             /\ next_block = {}
-
-NoTransactionsRemaining_iff_NotTimedOut ==
-    {} = RemainingTransactions <=> ContractFinished /\ ~SwapTimedOut
+ExpectedStateOnSuccess ==
+    SwapSuccessful => /\ ~ENABLED ContractAction
+                      /\ RemainingTransactions = {}
+                      /\ mempool = {}
+                      /\ next_block = {}
 
 \* Can use this invariant to check if certain state can be reached.
 \* If the CounterExample invariant is violated, then the state has been reached.
@@ -728,7 +723,6 @@ CounterExample == TRUE \* /\ ...
 
 ContractEventuallyFinished == <>ContractFinished
 
-\*`^\newpage^'
 (***************)
 (* Init & Next *)
 (***************)
