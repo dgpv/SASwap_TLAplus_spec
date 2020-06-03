@@ -29,6 +29,7 @@ ShowConfirmedSetOnFinish ==
            FinState ==
                 CASE SwapSuccessful      -> <<"Success",   ConfPairs>>
                   [] SwapAborted         -> <<"Abort",     ConfPairs>>
+                  [] SwapDeadlocked      -> <<"Deadlock",  ConfPairs>>
                   [] SwapUnnaturalEnding -> <<"Unnatural", ConfPairs>>
         IN ContractFinished
            => (FinState \notin TLCGet(slot_conf_on_finish)

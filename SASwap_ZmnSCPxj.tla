@@ -142,6 +142,8 @@ SentTransactions == ConfirmedTransactions \union MempoolTransactions
 
 EnabledTransactions == {tx.id: tx \in UNION Range(per_block_enabled)}
 
+SharedTransactions == {tx.id: tx \in shared_knowledge}
+
 ContractTransactions ==
     { id \in all_transactions:
          \A d \in tx_map[id].ds: d \in all_transactions }
@@ -371,13 +373,15 @@ AliceAction ==
      IN \/ /\ Send({ id \in RemainingTransactions: SafeToSend(id) })
            /\ NoKeysShared
         \/ /\ { tx_lock_A, tx_lock_B } \subseteq ConfirmedTransactions
-           /\ ~({tx_success, tx_timeout} \subseteq {tx.id: tx \in shared_knowledge})
+           /\ ~({ tx_success, tx_timeout } \subseteq SharedTransactions)
+           /\ tx_refund_1 \notin SentTransactions
            /\ Share({ tx_success, tx_timeout })
            /\ NoSending /\ NoKeysShared
         \/ /\ { tx_lock_A, tx_lock_B } \subseteq ConfirmedTransactions
-           /\ {tx_success, tx_refund_1, tx_timeout} \subseteq {tx.id: tx \in shared_knowledge}
+           /\ { tx_success, tx_refund_1, tx_timeout } \subseteq SharedTransactions
            /\ secretBob \in signers_map[Alice] \* Bob gave Alice his secret
            /\ sigAlice \notin signers_map[Bob] \* Alice did not yet gave Bob her key
+           /\ tx_success \notin ConfirmedTransactions \* Swap went on-chain => no key sharing
            /\ ~TooLateToShare
            /\ signers_map' = [signers_map  \* Give Alice's key to Bob
                               EXCEPT ![Bob] = @ \union { sigAlice }]
@@ -389,14 +393,14 @@ BobAction ==
         tx_success_sigs == SigsAvailable(tx_success, Bob, Contract)
      IN \/ /\ Send(RemainingTransactions)
            /\ NoKeysShared /\ UNCHANGED wont_send
-        \/ /\ tx_refund_1 \notin {tx.id: tx \in shared_knowledge}
+        \/ /\ tx_refund_1 \notin SharedTransactions
            /\ tx_success \notin SentTransactions
            /\ tx_timeout \notin SentTransactions
            /\ Share({ tx_refund_1 })
            /\ wont_send' = wont_send \union {tx_timeout}
            /\ NoSending /\ NoKeysShared
         \/ /\ { tx_lock_A, tx_lock_B } \subseteq ConfirmedTransactions
-           /\ {tx_success, tx_refund_1, tx_timeout} \subseteq {tx.id: tx \in shared_knowledge}
+           /\ { tx_success, tx_refund_1, tx_timeout } \subseteq SharedTransactions
            /\ tx_success \notin SentTransactions
            /\ tx_timeout \notin SentTransactions
            /\ secretAlice \notin tx_success_sigs
@@ -503,9 +507,19 @@ SwapAborted ==
     /\ \/ HasCustody({ tx_spend_B }, Bob)
        \/ tx_lock_B \notin SentTransactions
 
+SwapDeadlocked ==
+    LET stx == Tx(tx_success, tx_map[tx_success].ss, Bob, Contract, "test")
+        rtx == Tx(tx_refund_1, tx_map[tx_refund_1].ss, Alice, Contract, "test")
+     IN /\ ConfirmedTransactions = {tx_lock_A, tx_lock_B}
+        /\ IsSpendableTx(stx, SentTransactions)
+        /\ IsSpendableTx(rtx, SentTransactions)
+        /\ ~ENABLED AliceAction
+        /\ ~ENABLED BobAction
+
 \* All possible endings of the contract
 ContractFinished == \/ SwapSuccessful
                     \/ SwapAborted
+                    \/ SwapDeadlocked
                     \/ PARTICIPANTS_IRRATIONAL /\ SwapUnnaturalEnding
 
 \* Actions in the contract when it is not yet finished. Separated into
